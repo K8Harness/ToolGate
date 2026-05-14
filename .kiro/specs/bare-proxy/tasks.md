@@ -17,7 +17,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 4.1, 6.1_
 
 - [ ] 2. Pipeline infrastructure
-- [ ] 2.1 Define the Handler interface and function adapter
+- [x] 2.1 Define the Handler interface and function adapter
   - Declare `Handler` interface with `Handle(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error)`
   - Declare `HandlerFunc` type that wraps the same signature and satisfies `Handler`
   - Document the three-value return contract in the source: `(nil, nil)` = continue; `(nil, error)` = halt with error; `(*JSONRPCResponse, nil)` = halt with response
