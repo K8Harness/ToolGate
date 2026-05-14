@@ -24,7 +24,7 @@
   - Confirm: a `HandlerFunc` literal assigned to a `Handler` variable compiles without type assertion; `go vet ./core/mcp/...` reports no issues
   - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 2.2 Implement Pipeline with ordered registration and halt-aware execution
+- [x] 2.2 Implement Pipeline with ordered registration and halt-aware execution
   - Implement `Pipeline` struct holding a registered-handler slice and a non-nil terminal handler
   - `NewPipeline(terminal Handler)` panics if `terminal` is nil
   - `Use(h Handler)` appends to the handler slice; safe to call only before `ListenAndServe`
