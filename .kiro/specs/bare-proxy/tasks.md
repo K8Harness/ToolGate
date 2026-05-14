@@ -50,7 +50,7 @@
   - _Requirements: 4.1, 4.4, 4.5, 6.2_
   - _Boundary: UpstreamForwarder_
 
-- [ ] 3.3 (P) Implement the in-memory session registry
+- [x] 3.3 (P) Implement the in-memory session registry
   - Store `Session{ID string, CreatedAt time.Time}` values in a `sync.Map`
   - `Create()` generates a session ID using `crypto/rand` (not `math/rand`) and stores the session before returning it
   - `Get(id)` and `Delete(id)` are safe for concurrent use without additional locking
