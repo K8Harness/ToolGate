@@ -58,7 +58,7 @@
   - _Requirements: 1.1, 1.3_
   - _Boundary: SessionRegistry_
 
-- [ ] 3.4 (P) Build the context injector pipeline handler
+- [x] 3.4 (P) Build the context injector pipeline handler
   - Only act on `tools/call` requests; return `(nil, nil)` immediately for all other method names
   - Read `sessionId` and `turnId` from the request context using the helpers defined in `core/mcp/types.go`
   - Unmarshal `req.Params` as a raw JSON object; read the existing `_meta` key if present; set `sessionId` and `turnId` keys without removing other keys (including `progressToken`); re-marshal `_meta` and `params` back into `req.Params`
