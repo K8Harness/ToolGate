@@ -1,0 +1,62 @@
+# ── Go ────────────────────────────────────────────────────────────────────────
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+go.sum.bak
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.venv/
+venv/
+env/
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ── Environment & secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── Editor / OS ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Local data & logs ─────────────────────────────────────────────────────────
+data/
+logs/
+*.log
+postgres-data/
+redis-data/
+
+# ── Eval artifacts ────────────────────────────────────────────────────────────
+evals/results/
+evals/traces/
+*.eval.json
