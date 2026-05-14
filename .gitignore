@@ -60,3 +60,16 @@ redis-data/
 evals/results/
 evals/traces/
 *.eval.json
+
+# ── md  ────────────────────────────────────────────────────────────
+.kiro
+.agents
+.claude
+.codex
+project.md
+v0.md
+CLAUDE.md
+agents.md
+
+
+
