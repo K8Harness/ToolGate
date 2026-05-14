@@ -8,7 +8,7 @@
   - Confirm: `go build ./...` exits 0 with no errors and the two-directory tree (`cmd/gateway`, `core/mcp`) is present
   - _Requirements: 4.2_
 
-- [ ] 1.2 Define shared MCP JSON-RPC types and context key utilities
+- [x] 1.2 Define shared MCP JSON-RPC types and context key utilities
   - Define `JSONRPCRequest`, `JSONRPCResponse`, `JSONRPCError`, and `MCPMeta` structs with correct JSON field tags
   - Define typed context key constants (`ContextKeySessionID`, `ContextKeyTurnID`) and the four accessor/setter functions (`SessionIDFromContext`, `TurnIDFromContext`, `WithSessionID`, `WithTurnID`)
   - Define error code constants `CodeParseError = -32700` and `CodeInternalError = -32603`
