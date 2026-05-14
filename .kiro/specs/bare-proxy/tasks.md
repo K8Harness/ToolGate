@@ -40,7 +40,7 @@
   - _Requirements: 1.4, 4.2, 4.3_
   - _Boundary: Config_
 
-- [ ] 3.2 (P) Build the upstream MCP forwarder
+- [x] 3.2 (P) Build the upstream MCP forwarder
   - Note: this is the only Task 3 subtask in `core/mcp`; all other Task 3 subtasks live in `cmd/gateway` — no file contention among parallel workers
   - Implement `UpstreamForwarder` as a `Handler` that `POST`s the `JSONRPCRequest` to the configured upstream URL with `Content-Type: application/json` and `Accept: application/json, text/event-stream`
   - Detect upstream response content-type: unmarshal `application/json` body directly; for `text/event-stream`, read lines until a `data:` line, then unmarshal that payload
