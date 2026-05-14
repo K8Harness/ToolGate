@@ -61,14 +61,16 @@ evals/results/
 evals/traces/
 *.eval.json
 
-# ── md  ────────────────────────────────────────────────────────────
-.kiro
+# ── AI tools (personal only — project artifacts are committed) ────────────────
+# .kiro/specs/, .kiro/steering/, .kiro/settings/, CLAUDE.md → committed
+.kiro/.obsidian/
+.kiro/index.md
+# .claude/commands/, .claude/skills/ → committed
+.claude/settings.local.json
 .agents
-.claude
 .codex
 project.md
 v0.md
-CLAUDE.md
 agents.md
 
 

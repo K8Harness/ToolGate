@@ -1,0 +1,22 @@
+{
+  "feature_name": "policy-gate",
+  "created_at": "2026-05-14T00:00:00Z",
+  "updated_at": "2026-05-14T12:00:00Z",
+  "language": "en",
+  "phase": "requirements-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": false
+    },
+    "design": {
+      "generated": false,
+      "approved": false
+    },
+    "tasks": {
+      "generated": false,
+      "approved": false
+    }
+  },
+  "ready_for_implementation": false
+}
