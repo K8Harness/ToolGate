@@ -41,7 +41,7 @@ func TestSessionRegistryCreateGetDelete(t *testing.T) {
 
 func TestSessionRegistryConcurrentCreateReturnsDistinctIDs(t *testing.T) {
 	var registry SessionRegistry
-	const workers = 2
+	const workers = 10
 
 	ids := make(chan string, workers)
 	var wg sync.WaitGroup

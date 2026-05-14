@@ -18,119 +18,99 @@ func TestNewPipelinePanicsOnNilTerminal(t *testing.T) {
 	NewPipeline(nil)
 }
 
-func TestPipelineRunCallsTerminalWhenNoHandlersRegistered(t *testing.T) {
-	req := testPipelineRequest()
-	want := testPipelineResponse(req.ID, `{"ok":true}`)
-	var calls []string
-
-	pipeline := NewPipeline(HandlerFunc(func(ctx context.Context, gotReq *JSONRPCRequest) (*JSONRPCResponse, error) {
-		calls = append(calls, "terminal")
-		if gotReq != req {
-			t.Fatalf("terminal req = %p, want %p", gotReq, req)
-		}
-		return want, nil
-	}))
-
-	got, err := pipeline.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run returned error: %v", err)
-	}
-	if got != want {
-		t.Fatalf("Run response = %p, want %p", got, want)
-	}
-	if !reflect.DeepEqual(calls, []string{"terminal"}) {
-		t.Fatalf("calls = %v, want [terminal]", calls)
-	}
-}
-
-func TestPipelineRunExecutesHandlersInRegistrationOrderBeforeTerminal(t *testing.T) {
-	req := testPipelineRequest()
-	want := testPipelineResponse(req.ID, `{"ok":true}`)
-	var calls []string
-
-	pipeline := NewPipeline(HandlerFunc(func(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
-		calls = append(calls, "terminal")
-		return want, nil
-	}))
-	pipeline.Use(HandlerFunc(func(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
-		calls = append(calls, "first")
-		return nil, nil
-	}))
-	pipeline.Use(HandlerFunc(func(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
-		calls = append(calls, "second")
-		return nil, nil
-	}))
-
-	got, err := pipeline.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run returned error: %v", err)
-	}
-	if got != want {
-		t.Fatalf("Run response = %p, want %p", got, want)
-	}
-	if !reflect.DeepEqual(calls, []string{"first", "second", "terminal"}) {
-		t.Fatalf("calls = %v, want [first second terminal]", calls)
-	}
-}
-
-func TestPipelineRunHaltsOnFirstHandlerError(t *testing.T) {
-	req := testPipelineRequest()
+func TestPipelineRunScenarios(t *testing.T) {
+	wantTerminal := testPipelineResponse(json.RawMessage(`1`), `{"ok":true}`)
+	wantHalt := testPipelineResponse(json.RawMessage(`1`), `{"halted":true}`)
 	wantErr := errors.New("halt")
-	var calls []string
 
-	pipeline := NewPipeline(HandlerFunc(func(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
-		calls = append(calls, "terminal")
-		return testPipelineResponse(req.ID, `{"ok":true}`), nil
-	}))
-	pipeline.Use(HandlerFunc(func(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
-		calls = append(calls, "first")
-		return nil, wantErr
-	}))
-	pipeline.Use(HandlerFunc(func(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
-		calls = append(calls, "second")
-		return nil, nil
-	}))
+	tests := []struct {
+		name      string
+		handlers  []pipelineTestHandler
+		wantResp  *JSONRPCResponse
+		wantErr   error
+		wantCalls []string
+	}{
+		{
+			name:      "calls terminal when no handlers registered",
+			wantResp:  wantTerminal,
+			wantCalls: []string{"terminal"},
+		},
+		{
+			name: "continues to terminal after nil response and nil error",
+			handlers: []pipelineTestHandler{
+				{name: "first"},
+			},
+			wantResp:  wantTerminal,
+			wantCalls: []string{"first", "terminal"},
+		},
+		{
+			name: "halts on first handler error",
+			handlers: []pipelineTestHandler{
+				{name: "first", err: wantErr},
+				{name: "second"},
+			},
+			wantErr:   wantErr,
+			wantCalls: []string{"first"},
+		},
+		{
+			name: "halts on first handler response",
+			handlers: []pipelineTestHandler{
+				{name: "first", resp: wantHalt},
+				{name: "second"},
+			},
+			wantResp:  wantHalt,
+			wantCalls: []string{"first"},
+		},
+		{
+			name: "executes handlers in registration order before terminal",
+			handlers: []pipelineTestHandler{
+				{name: "first"},
+				{name: "second"},
+			},
+			wantResp:  wantTerminal,
+			wantCalls: []string{"first", "second", "terminal"},
+		},
+	}
 
-	got, err := pipeline.Run(context.Background(), req)
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("Run error = %v, want %v", err, wantErr)
-	}
-	if got != nil {
-		t.Fatalf("Run response = %v, want nil", got)
-	}
-	if !reflect.DeepEqual(calls, []string{"first"}) {
-		t.Fatalf("calls = %v, want [first]", calls)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := testPipelineRequest()
+			var calls []string
+
+			pipeline := NewPipeline(HandlerFunc(func(ctx context.Context, gotReq *JSONRPCRequest) (*JSONRPCResponse, error) {
+				calls = append(calls, "terminal")
+				if gotReq != req {
+					t.Fatalf("terminal req = %p, want %p", gotReq, req)
+				}
+				return wantTerminal, nil
+			}))
+
+			for _, handler := range tt.handlers {
+				handler := handler
+				pipeline.Use(HandlerFunc(func(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
+					calls = append(calls, handler.name)
+					return handler.resp, handler.err
+				}))
+			}
+
+			got, err := pipeline.Run(context.Background(), req)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Run error = %v, want %v", err, tt.wantErr)
+			}
+			if got != tt.wantResp {
+				t.Fatalf("Run response = %p, want %p", got, tt.wantResp)
+			}
+			if !reflect.DeepEqual(calls, tt.wantCalls) {
+				t.Fatalf("calls = %v, want %v", calls, tt.wantCalls)
+			}
+		})
 	}
 }
 
-func TestPipelineRunHaltsOnFirstHandlerResponse(t *testing.T) {
-	req := testPipelineRequest()
-	want := testPipelineResponse(req.ID, `{"halted":true}`)
-	var calls []string
-
-	pipeline := NewPipeline(HandlerFunc(func(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
-		calls = append(calls, "terminal")
-		return testPipelineResponse(req.ID, `{"ok":true}`), nil
-	}))
-	pipeline.Use(HandlerFunc(func(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
-		calls = append(calls, "first")
-		return want, nil
-	}))
-	pipeline.Use(HandlerFunc(func(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
-		calls = append(calls, "second")
-		return nil, nil
-	}))
-
-	got, err := pipeline.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run returned error: %v", err)
-	}
-	if got != want {
-		t.Fatalf("Run response = %p, want %p", got, want)
-	}
-	if !reflect.DeepEqual(calls, []string{"first"}) {
-		t.Fatalf("calls = %v, want [first]", calls)
-	}
+type pipelineTestHandler struct {
+	name string
+	resp *JSONRPCResponse
+	err  error
 }
 
 func testPipelineRequest() *JSONRPCRequest {
