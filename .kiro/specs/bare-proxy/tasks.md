@@ -33,7 +33,7 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
 - [ ] 3. Core gateway components
-- [ ] 3.1 (P) Implement configuration loading with startup validation
+- [x] 3.1 (P) Implement configuration loading with startup validation
   - Load `GATEWAY_PORT` (default 8080), `UPSTREAM_MCP_URL` (required), `TURN_ID_HEADER` (default `X-Mcp-Turn-Id`), `UPSTREAM_TIMEOUT` (default 30s), `SESSION_TTL` (default 60m) from environment variables
   - `LoadConfig()` returns a non-nil `error` — not a panic — when `UPSTREAM_MCP_URL` is empty or unset
   - Confirm: `LoadConfig()` with `UPSTREAM_MCP_URL` unset returns an error whose message names the missing variable; with only `UPSTREAM_MCP_URL` set, returns a `Config` with `ListenPort == 8080` and `TurnIDHeader == "X-Mcp-Turn-Id"`
