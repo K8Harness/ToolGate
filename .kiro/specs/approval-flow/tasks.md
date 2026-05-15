@@ -48,7 +48,7 @@
   - _Boundary: SlackWebhookHandler_
 
 - [ ] 3. Integration — pipeline modification and binary wiring
-- [ ] 3.1 Modify the policy gate approval path to hold the connection
+- [x] 3.1 Modify the policy gate approval path to hold the connection
   - Change the `approvalRequired` branch in `PolicyGateHandler` to invoke the approval hold and Slack notification instead of returning a pending response immediately
   - After inserting the ticket, launch a goroutine to send the Slack notification; notification failures are logged and do not block the approval hold
   - Call `WaitForDecision` with the ticket ID, session ID, and turn ID; block until a decision or timeout

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -60,6 +61,8 @@ type PolicyGateHandler struct {
 	audit     auditRecorder
 	tickets   ticketInserter
 	evaluator policyEvaluator
+	bridge    ApprovalBridge
+	notifier  SlackNotifier
 	log       *slog.Logger
 	now       func() time.Time
 }
@@ -69,9 +72,11 @@ func NewPolicyGateHandler(
 	budget *BudgetTracker,
 	audit *AuditWriter,
 	tickets *TicketStore,
+	bridge ApprovalBridge,
+	notifier SlackNotifier,
 	log *slog.Logger,
 ) *PolicyGateHandler {
-	return newPolicyGateHandler(policy, budget, audit, tickets, defaultPolicyEvaluator{}, log, time.Now)
+	return newPolicyGateHandler(policy, budget, audit, tickets, defaultPolicyEvaluator{}, bridge, notifier, log, time.Now)
 }
 
 func newPolicyGateHandler(
@@ -80,6 +85,8 @@ func newPolicyGateHandler(
 	audit auditRecorder,
 	tickets ticketInserter,
 	evaluator policyEvaluator,
+	bridge ApprovalBridge,
+	notifier SlackNotifier,
 	log *slog.Logger,
 	now func() time.Time,
 ) *PolicyGateHandler {
@@ -96,6 +103,8 @@ func newPolicyGateHandler(
 		audit:     audit,
 		tickets:   tickets,
 		evaluator: evaluator,
+		bridge:    bridge,
+		notifier:  notifier,
 		log:       log,
 		now:       now,
 	}
@@ -167,7 +176,7 @@ func (h *PolicyGateHandler) Handle(ctx context.Context, req *mcp.JSONRPCRequest)
 	case corepolicy.ActionDeny:
 		return mcp.NewErrorResponse(req.ID, mcp.CodePolicyDenied, "denied by policy"), nil
 	case corepolicy.ActionApprovalRequired:
-		_, err := h.tickets.Insert(ctx, TicketRecord{
+		ticketID, err := h.tickets.Insert(ctx, TicketRecord{
 			SessionID: sessionID,
 			TurnID:    turnID,
 			ToolName:  toolName,
@@ -183,23 +192,47 @@ func (h *PolicyGateHandler) Handle(ctx context.Context, req *mcp.JSONRPCRequest)
 				"toolName", toolName,
 				"error", err,
 			)
+			// Fail open: continue with empty ticketID so the approval hold still proceeds.
 		}
 
-		result, err := json.Marshal(map[string]string{
-			"status":  "pending",
-			"message": "tool call requires human approval",
-		})
-		if err != nil {
-			return nil, &policyGateParamsError{err: fmt.Errorf("encode pending result: %w", err)}
-		}
+		notifier := h.notifier
+		go func() {
+			if err := notifier.SendApprovalRequest(context.Background(), ticketID, TicketRecord{
+				SessionID: sessionID,
+				TurnID:    turnID,
+				ToolName:  toolName,
+				Arguments: arguments,
+			}); err != nil {
+				h.log.Error("slack notification failed", "ticketID", ticketID, "error", err)
+			}
+		}()
 
-		return &mcp.JSONRPCResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Result:  result,
-		}, nil
+		decision, err := h.bridge.WaitForDecision(ctx, ticketID, sessionID, turnID)
+		if errors.Is(err, ErrApprovalTimeout) {
+			h.log.Error("approval timed out", "ticketID", ticketID, "sessionID", sessionID, "turnID", turnID)
+			return approvalErrorResponse(req.ID, "approval timeout"), nil
+		}
+		if err != nil || !decision.Approved {
+			h.log.Info("approval denied", "ticketID", ticketID, "sessionID", sessionID)
+			return approvalErrorResponse(req.ID, "approval denied"), nil
+		}
+		// Approved: return (nil, nil) — pipeline continues to UpstreamForwarder
+		return nil, nil
 	default:
 		return nil, &policyGateParamsError{err: fmt.Errorf("unsupported policy decision %q", decision.Action)}
+	}
+}
+
+// approvalErrorResponse constructs a JSON-RPC error response for approval failures.
+// It uses code -32001 (CodePolicyDenied) for both "approval denied" and "approval timeout".
+func approvalErrorResponse(id json.RawMessage, msg string) *mcp.JSONRPCResponse {
+	return &mcp.JSONRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Error: &mcp.JSONRPCError{
+			Code:    mcp.CodePolicyDenied,
+			Message: msg,
+		},
 	}
 }
 
