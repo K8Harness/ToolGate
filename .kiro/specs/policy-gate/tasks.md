@@ -14,7 +14,7 @@
   - _Requirements: 5.1_
   - _Boundary: core/mcp.types_
 
-- [ ] 1.3 (P) Extend gateway configuration with policy and Postgres environment variables
+- [x] 1.3 (P) Extend gateway configuration with policy and Postgres environment variables
   - Add `PolicyFilePath` (env `POLICY_FILE`, default `"policy.yaml"`) and `PostgresDSN` (env `POSTGRES_DSN`, required) to the `Config` struct
   - `LoadConfig` returns a non-nil error when `POSTGRES_DSN` is unset; the default policy file path is logged at startup-info level when the env var is absent
   - Observable: starting the gateway without `POSTGRES_DSN` exits non-zero with an error message naming the missing variable; starting with only `POSTGRES_DSN` set yields a `Config` whose `PolicyFilePath` is `"policy.yaml"`
