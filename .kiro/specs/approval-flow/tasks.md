@@ -8,7 +8,7 @@
   - The gateway refuses to start and logs which specific variable is missing — observable via startup output
   - _Requirements: 2.4, 3.5, 6.1, 6.2, 6.3, 6.4_
 
-- [ ] 1.2 Add ticket status transition capability to TicketStore
+- [x] 1.2 Add ticket status transition capability to TicketStore
   - Extend the ticket persistence layer with a method that transitions a ticket from `pending` to a terminal status (`approved`, `denied`, or `expired`)
   - The transition carries a decision timestamp and the ID of the actor who made the decision (empty for system-triggered transitions)
   - The operation is idempotent: if the ticket is already in a terminal status, the call succeeds silently with no update
@@ -102,6 +102,9 @@
   - Timeout flow: configure a short timeout (e.g. 100ms); verify `UpdateStatus("expired")` is called and `ErrApprovalTimeout` is returned
   - Idempotent `UpdateStatus`: call twice with `"approved"`; second call succeeds silently with no double-write
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 4.1, 4.2, 5.1, 5.2_
+
+## Implementation Notes
+- Schema bug fixed: ticket.status CHECK constraint had 'rejected' instead of 'denied' (the canonical value per design/requirements). Fixed in db.go with a DO-block repair migration for existing databases. All downstream tasks must use 'denied', not 'rejected'.
 
 - [ ] 4.5 End-to-end validation via Docker Compose with real Redis and Slack webhook simulation
   - Bring up the full Docker Compose stack including Postgres and Redis
