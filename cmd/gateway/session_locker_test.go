@@ -11,6 +11,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// SessionLocker tests require a live Redis instance via TOOLGATE_TEST_REDIS_DSN.
+// For local validation against the compose stack, run them where Redis is reachable
+// as redis://redis:6379/0 (for example, from a docker compose gateway container).
+
 func TestSessionLockerAcquireReenterAndRelease(t *testing.T) {
 	t.Parallel()
 

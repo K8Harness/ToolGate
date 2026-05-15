@@ -83,7 +83,7 @@
   - _Requirements: 4.1, 4.2_
   - _Boundary: OperationClassifier_
 
-- [ ] 4.2 (P) Unit tests for SessionLocker
+- [x] 4.2 (P) Unit tests for SessionLocker
   - Use a real Redis instance in tests (via testcontainers, miniredis, or a test-local `docker run redis:7-alpine`); document the approach in a `TestMain` or build tag comment
   - Test Acquire with no prior lock → returns nil; `session:<id>:refcount` equals 1 in Redis
   - Test re-entry with same turnID → refcount increments to 2; two Release calls → both keys deleted from Redis
