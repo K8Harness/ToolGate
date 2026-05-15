@@ -23,7 +23,7 @@
   - _Note: task.md originally named `cmd/gateway/policy_gate.go` as the edit site; corrected to `core/policy/policy.go` to match code reality (design.md §Allowed Dependencies: "may extend but not restructure")_
 
 - [ ] 2. Core lock primitives and operation classifier
-- [ ] 2.1 (P) Build the OperationClassifier
+- [x] 2.1 (P) Build the OperationClassifier
   - Implement `OperationClass` type (values: `OperationClassRead`, `OperationClassWrite`) and `OperationClassifier` struct in `cmd/gateway/classifier.go`
   - Implement `NewOperationClassifier(classes map[string]string) *OperationClassifier` and `Classify(toolName string) OperationClass`
   - Explicit map entries (from `AgentPolicy.OperationClasses`) take precedence over the default heuristic
