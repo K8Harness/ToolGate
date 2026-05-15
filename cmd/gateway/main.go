@@ -55,12 +55,20 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 		return nil, nil, fmt.Errorf("policy load failed: %w", err)
 	}
 
+	redisClient, err := NewRedisClient(*config)
+	if err != nil {
+		return nil, nil, fmt.Errorf("redis initialization failed: %w", err)
+	}
+	logger.Info("redis connectivity confirmed")
+
 	pool, err := NewDBPool(ctx, config.PostgresDSN)
 	if err != nil {
+		redisClient.Close()
 		return nil, nil, fmt.Errorf("postgres initialization failed: %w", err)
 	}
 
 	cleanup := func() {
+		redisClient.Close()
 		pool.Close()
 	}
 

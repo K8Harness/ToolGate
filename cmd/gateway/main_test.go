@@ -88,7 +88,7 @@ func TestRunGatewayFatalfsWhenPolicyYAMLIsInvalid(t *testing.T) {
 func TestRunGatewayFatalfsWhenPostgresInitFails(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://127.0.0.1:1/toolgate?sslmode=disable&connect_timeout=1")
-	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("REDIS_DSN", testRedisDSN(t))
 	t.Setenv("POLICY_FILE", writePolicyFile(t, `
 defaultAction: deny
 budgets:
@@ -110,9 +110,48 @@ rules:
 	}
 }
 
+func TestBuildGatewayServerFailsWhenRedisInitFails(t *testing.T) {
+	ctx := context.Background()
+	policyPath := writePolicyFile(t, `
+defaultAction: allow
+budgets:
+  maxToolCallsPerTurn: 3
+rules:
+  - tool: refund
+    action: allow
+`)
+
+	config := &Config{
+		ListenPort:      8080,
+		PolicyFilePath:  policyPath,
+		PostgresDSN:     "postgres://127.0.0.1:1/toolgate?sslmode=disable&connect_timeout=1",
+		RedisDSN:        "redis://127.0.0.1:1/0",
+		UpstreamMCPURL:  "http://example.invalid",
+		TurnIDHeader:    defaultTurnIDHeader,
+		UpstreamTimeout: time.Second,
+		SessionTTL:      time.Minute,
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	server, cleanup, err := buildGatewayServer(ctx, config, logger)
+	if cleanup != nil {
+		t.Fatal("cleanup != nil, want nil when Redis init fails")
+	}
+	if server != nil {
+		t.Fatal("server != nil, want nil when Redis init fails")
+	}
+	if err == nil {
+		t.Fatal("buildGatewayServer() error = nil, want redis initialization failure")
+	}
+	if !strings.Contains(err.Error(), "redis initialization failed") {
+		t.Fatalf("error = %q, want redis initialization context", err)
+	}
+}
+
 func TestNewGatewayServerBuildsPipelineAndForwarder(t *testing.T) {
 	config := &Config{
 		ListenPort:      8080,
+		RedisDSN:        "redis://localhost:6379/0",
 		UpstreamMCPURL:  "http://example.invalid",
 		TurnIDHeader:    defaultTurnIDHeader,
 		UpstreamTimeout: time.Second,
@@ -160,6 +199,7 @@ rules:
 		ListenPort:      8080,
 		PolicyFilePath:  policyPath,
 		PostgresDSN:     dsn,
+		RedisDSN:        testRedisDSN(t),
 		UpstreamMCPURL:  upstream.URL,
 		TurnIDHeader:    defaultTurnIDHeader,
 		UpstreamTimeout: time.Second,

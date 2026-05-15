@@ -8,10 +8,13 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       GATEWAY_PORT: "8080"
       POLICY_FILE: policy.yaml
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
+      REDIS_DSN: redis://redis:6379/0
       UPSTREAM_MCP_URL: http://fake-upstream:8081/mcp
     ports:
       - "18080:8080"
@@ -41,6 +44,15 @@ services:
       start_period: 5s
     volumes:
       - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "6379"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
 
 volumes:
   postgres-data:

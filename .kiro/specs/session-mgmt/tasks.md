@@ -8,7 +8,7 @@
   - Observable: `go build ./...` succeeds with no compile errors; starting the gateway without `REDIS_DSN` exits with a clear error message naming the missing variable
   - _Requirements: 2.5, 2.6_
 
-- [ ] 1.2 Add Redis service to Docker Compose and build the Redis client factory
+- [x] 1.2 Add Redis service to Docker Compose and build the Redis client factory
   - Add `redis:7-alpine` service to `docker-compose.yml` with a TCP healthcheck on port 6379; add `REDIS_DSN=redis://redis:6379/0` to the gateway service env block; add `redis` to the gateway's `depends_on` with `condition: service_healthy`
   - Implement `NewRedisClient(cfg Config) (*redis.Client, error)` in `cmd/gateway/redis.go`: parse the DSN with `redis.ParseURL()`, dial the client, call `Ping()` to validate connectivity at startup; return a descriptive error on failure
   - Observable (infra): `docker compose up` starts a healthy Redis service; `docker compose ps` shows redis as healthy before gateway starts
