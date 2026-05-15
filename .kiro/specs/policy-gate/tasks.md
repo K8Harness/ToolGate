@@ -74,7 +74,7 @@
   - _Boundary: PolicyGateHandler, BudgetTracker_
 
 - [ ] 3. Integration — startup sequence and pipeline registration
-- [ ] 3.1 Wire policy loading, DB pool, schema migration, and PolicyGateHandler into the gateway binary
+- [x] 3.1 Wire policy loading, DB pool, schema migration, and PolicyGateHandler into the gateway binary
   - In `main.go`, sequence: `LoadConfig()` → `LoadPolicy(cfg.PolicyFilePath)` → `NewDBPool(ctx, cfg.PostgresDSN)` → `MigrateSchema(ctx, pool)` → construct `BudgetTracker`, `AuditWriter` (call `Start(ctx)`), `TicketStore`, `PolicyGateHandler` → register pipeline handlers via `pipeline.Use` in the order `RequestLogger`, `ContextInjector`, `PolicyGateHandler`, with `UpstreamForwarder` set as the terminal handler
   - Any failure in policy loading, pool initialization, ping, or schema migration must call `log.Fatalf` with a human-readable message identifying the failed check, before any port is bound
   - Observable: running the binary with valid `POLICY_FILE` + `POSTGRES_DSN` against a reachable Postgres binds port 8080 and serves; running with an unreachable Postgres exits non-zero before binding the port; running with a missing policy file exits non-zero before binding the port
@@ -83,21 +83,21 @@
   - _Boundary: main.go (integration)_
 
 - [ ] 4. Validation — unit, integration, and end-to-end tests
-- [ ] 4.1 (P) Unit tests for the policy package
+- [x] 4.1 (P) Unit tests for the policy package
   - `LoadPolicy`: missing file → error containing the path; YAML syntax error → error; unknown YAML field → error (KnownFields); invalid `defaultAction` (e.g., `approvalRequired`) → validation error; valid policy → `AgentPolicy` fields match the input
   - `Evaluate`: first rule matches → returns that action; first rule does not match but second does → returns the second; no rule matches → returns `defaultAction`; empty rules list → returns `defaultAction`
   - Observable: all cases pass in `core/policy/*_test.go` under `go test -race` with no warnings
   - _Requirements: 1.3, 1.4, 1.5, 3.3, 3.4_
   - _Boundary: core/policy_
 
-- [ ] 4.2 (P) Unit tests for BudgetTracker
+- [x] 4.2 (P) Unit tests for BudgetTracker
   - First call returns `1`; N sequential calls return `N`; independent `(sessionID, turnID)` pairs do not interfere with each other's counters
   - Concurrent goroutine increments produce the expected total count with no data-race warnings
   - Observable: `cmd/gateway/budget_test.go` passes under `go test -race` with no warnings
   - _Requirements: 7.1_
   - _Boundary: BudgetTracker_
 
-- [ ] 4.3 (P) Unit tests for PolicyGateHandler decision branches
+- [x] 4.3 (P) Unit tests for PolicyGateHandler decision branches
   - Passthrough: `req.Method = "tools/list"` → returns `(nil, nil)`; `AuditWriter.Write` not called; `BudgetTracker.IncrementAndGet` not called
   - Allow: evaluator returns `allow` → returns `(nil, nil)`; audit written with `decision="allow"`; sessionID/turnID from context appear on the audit record
   - Deny: evaluator returns `deny` → returns `-32001` response with message `"denied by policy"`; audit written with `decision="deny"`; `TicketStore.Insert` not called
@@ -107,14 +107,14 @@
   - _Requirements: 2.1, 3.2, 4.1, 5.1, 5.2, 6.1, 6.3, 7.2, 7.3, 8.1_
   - _Boundary: PolicyGateHandler_
 
-- [ ] 4.4 (P) Unit tests for AuditWriter
+- [x] 4.4 (P) Unit tests for AuditWriter
   - Full channel → `Write` returns immediately and emits a WARN log entry (verified by capturing `slog` JSON output); the request path is not blocked
   - Worker goroutine drains queued records to a stub pool and invokes the documented `INSERT` SQL; goroutine exits cleanly within a short timeout when the supplied context is cancelled
   - Observable: `cmd/gateway/audit_test.go` passes under `go test -race`; no goroutine leaks reported
   - _Requirements: 8.1, 8.2, 8.3_
   - _Boundary: AuditWriter_
 
-- [ ] 4.5 Integration tests with real Postgres and fake upstream
+- [x] 4.5 Integration tests with real Postgres and fake upstream
   - Stand up the full gateway via `httptest.NewServer` against a real Postgres (testcontainer or compose-managed) and a second `httptest.NewServer` as the fake upstream MCP server
   - Allow flow: `tools/call` matching an allow rule → upstream is reached; `audit_log` row exists with `decision="allow"`, the correct `session_id`, `turn_id`, `tool_name`, and a non-null `decided_at`
   - Deny flow: `tools/call` matching a deny rule → upstream not reached; `-32001` returned; `audit_log` row with `decision="deny"`
@@ -126,7 +126,7 @@
   - _Requirements: 1.3, 1.4, 2.1, 4.1, 5.1, 5.2, 6.1, 6.2, 6.3, 7.2, 7.3, 8.1, 8.2, 8.4, 9.1, 9.2_
   - _Boundary: Integration_
 
-- [ ] 4.6 End-to-end demo via Docker Compose with a curated policy.yaml
+- [x] 4.6 End-to-end demo via Docker Compose with a curated policy.yaml
   - Author a `policy.yaml` with rules: `refund_small → allow`, `refund_large → approvalRequired`, `delete_record → deny`; `defaultAction: deny`; `maxToolCallsPerTurn: 5`
   - Use `docker compose up` to bring up gateway + postgres + a fake upstream MCP server; drive the three scenarios with `curl` or a small Go client
   - `refund_small` → upstream result returned; `audit_log` row present with `decision="allow"`
@@ -135,3 +135,4 @@
   - Observable: a documented `make demo`-style script runs all three scenarios and prints PASS for each; resulting `audit_log` and `ticket` rows are queryable via `psql` against the compose-managed Postgres
   - _Requirements: 4.1, 5.1, 6.1, 6.2_
   - _Boundary: E2E_
+

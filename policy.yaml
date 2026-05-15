@@ -1,0 +1,10 @@
+rules:
+  - tool: refund_small
+    action: allow
+  - tool: refund_large
+    action: approvalRequired
+  - tool: delete_record
+    action: deny
+budgets:
+  maxToolCallsPerTurn: 5
+defaultAction: deny

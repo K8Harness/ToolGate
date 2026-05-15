@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,7 +117,7 @@ func TestAuditWriterStartLogsInsertFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var buf bytes.Buffer
+	var buf lockedBuffer
 	writer := newAuditWriter(
 		&auditExecStub{err: errors.New("insert failed")},
 		slog.New(slog.NewJSONHandler(&buf, nil)),
@@ -133,8 +135,8 @@ func TestAuditWriterStartLogsInsertFailure(t *testing.T) {
 
 	deadline := time.Now().Add(time.Second)
 	for {
-		if buf.Len() > 0 {
-			entry := decodeLogEntry(t, singleLogLine(t, &buf))
+		if line, ok := buf.singleLine(); ok {
+			entry := decodeLogEntry(t, line)
 			assertLogString(t, entry, "level", "WARN")
 			assertLogString(t, entry, "msg", "audit log insert failed")
 			assertLogString(t, entry, "sessionId", "session-err")
@@ -219,6 +221,33 @@ func TestAuditWriterStartInsertsRowWithPostgresDecidedAt(t *testing.T) {
 type auditExecCall struct {
 	sql  string
 	args []any
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) singleLine() (string, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.buf.Len() == 0 {
+		return "", false
+	}
+
+	lines := strings.Split(strings.TrimSpace(b.buf.String()), "\n")
+	if len(lines) != 1 {
+		return "", false
+	}
+
+	return lines[0], true
 }
 
 type auditExecStub struct {
