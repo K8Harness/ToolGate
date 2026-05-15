@@ -37,7 +37,7 @@
   - _Boundary: DB_
 
 - [ ] 2. Core — policy engine and Postgres-backed stores
-- [ ] 2.1 (P) Build the in-process policy package: types, YAML loader, ordered evaluator
+- [x] 2.1 (P) Build the in-process policy package: types, YAML loader, ordered evaluator
   - Define `Action`, `PolicyRule`, `Budgets`, `AgentPolicy`, and `PolicyDecision` types with YAML struct tags matching the design contract
   - Implement `LoadPolicy` with strict YAML decoding (`KnownFields(true)`) and a post-decode validation pass that rejects empty `Tool` names, invalid `Action` values, and a `DefaultAction` of `approvalRequired`
   - Implement `Evaluate` to return the first matching rule's decision by exact tool-name equality, or `DefaultAction` when no rule matches; never returns an error
