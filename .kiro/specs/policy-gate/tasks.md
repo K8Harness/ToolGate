@@ -54,7 +54,7 @@
   - _Depends: 1.5_
   - _Boundary: AuditWriter_
 
-- [ ] 2.3 (P) Build the synchronous ticket stub store
+- [x] 2.3 (P) Build the synchronous ticket stub store
   - Define `TicketRecord` (sessionID, turnID, toolName, arguments, expiresAt) and `TicketStore.Insert` that performs a synchronous `INSERT INTO ticket (...) VALUES (...) RETURNING id` against the configured `pgxpool`
   - Caller is responsible for setting `ExpiresAt` — the store does not invent timing or compute defaults
   - Insert errors are returned to the caller (for WARN logging upstream); the store does not retry
