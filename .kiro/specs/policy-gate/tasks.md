@@ -28,7 +28,7 @@
   - _Requirements: 8.4_
   - _Boundary: Infrastructure_
 
-- [ ] 1.5 Initialize Postgres connection pool and apply idempotent audit_log + ticket schema migrations
+- [x] 1.5 Initialize Postgres connection pool and apply idempotent audit_log + ticket schema migrations
   - Build a `pgxpool` with `MaxConns: 5`, `MinConns: 1`, `MaxConnIdleTime: 5min`, `HealthCheckPeriod: 1min`; verify connectivity with `Ping` at startup
   - Apply `CREATE TABLE IF NOT EXISTS` for `audit_log` (with the `(session_id, turn_id)` index and `decided_at TIMESTAMPTZ NOT NULL DEFAULT NOW()` column) and `ticket` (with the `(status, expires_at)` index) per the physical data model in design.md
   - Schema must include the `ticket.status` CHECK constraint covering `pending/approved/rejected/expired/cancelled` and the `audit_log.decision` CHECK constraint covering `allow/deny/approvalRequired/budgetExceeded`
