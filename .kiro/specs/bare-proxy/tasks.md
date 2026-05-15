@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Foundation — module setup and shared MCP types
+- [x] 1. Foundation — module setup and shared MCP types
 - [x] 1.1 Initialize Go module, directory skeleton, and dependencies
   - Run `go mod init` with the project module path; create the directory tree matching the File Structure Plan: `cmd/gateway/`, `core/mcp/`
   - Add `github.com/modelcontextprotocol/go-sdk` via `go get`; run `go mod tidy` to pin all transitive dependencies
@@ -16,7 +16,7 @@
   - Confirm: `go build ./core/mcp/...` succeeds; a standalone test calling `NewErrorResponse` asserts the returned struct has `jsonrpc: "2.0"`, the correct `code`, and the provided `message`
   - _Requirements: 3.1, 3.2, 3.3, 4.1, 6.1_
 
-- [ ] 2. Pipeline infrastructure
+- [x] 2. Pipeline infrastructure
 - [x] 2.1 Define the Handler interface and function adapter
   - Declare `Handler` interface with `Handle(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error)`
   - Declare `HandlerFunc` type that wraps the same signature and satisfies `Handler`
@@ -32,7 +32,7 @@
   - Confirm: when two handlers are registered and the first returns a non-nil error, `Run` returns that error and the second handler and terminal are not invoked (verified by a spy handler that records calls)
   - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 3. Core gateway components
+- [x] 3. Core gateway components
 - [x] 3.1 (P) Implement configuration loading with startup validation
   - Load `GATEWAY_PORT` (default 8080), `UPSTREAM_MCP_URL` (required), `TURN_ID_HEADER` (default `X-Mcp-Turn-Id`), `UPSTREAM_TIMEOUT` (default 30s), `SESSION_TTL` (default 60m) from environment variables
   - `LoadConfig()` returns a non-nil `error` — not a panic — when `UPSTREAM_MCP_URL` is empty or unset
@@ -77,7 +77,7 @@
   - _Requirements: 7.1, 7.2, 7.3_
   - _Boundary: RequestLogger_
 
-- [ ] 4. HTTP server and binary wiring
+- [x] 4. HTTP server and binary wiring
 - [x] 4.1 Build the HTTP server skeleton with session lifecycle and request context enrichment
   - Register `POST /mcp`, `GET /mcp`, and `DELETE /mcp` routes using Go 1.22 `ServeMux` method+path patterns
   - `POST /mcp` — `initialize` path: create a session in the registry, set `Mcp-Session-Id` response header, forward the `initialize` request directly to the upstream forwarder (bypassing the pipeline handlers)
@@ -101,7 +101,7 @@
   - Confirm: `UPSTREAM_MCP_URL=http://localhost:9999 go run ./cmd/gateway` prints a startup message and listens on port 8080 (verified by a successful TCP connect); running without `UPSTREAM_MCP_URL` prints an error to stderr and exits with a non-zero code without binding any port
   - _Requirements: 4.3_
 
-- [ ] 5. Unit tests
+- [x] 5. Unit tests
 - [x] 5.1 (P) Pipeline execution semantics unit tests
   - Empty pipeline (no `Use` calls): `Run` calls terminal directly and returns its result
   - Single middleware returning `(nil, nil)`: terminal is called, terminal's result is returned
@@ -136,7 +136,7 @@
   - _Requirements: 1.1, 1.3_
   - _Boundary: SessionRegistry_
 
-- [ ] 6. Integration and validation
+- [x] 6. Integration and validation
 - [x] 6.1 Integration tests with inline fake upstream and full HTTP client
   - Stand up the complete gateway (`Server` + `Pipeline` + all handlers) via `httptest.NewServer`; use a second `httptest.NewServer` as the fake upstream that captures and validates received requests
   - Test 1 — session init and tools/call: `POST /mcp {initialize}` → assert `Mcp-Session-Id` header in response; `POST /mcp {tools/call}` with that header → fake upstream asserts `_meta.sessionId` and `_meta.turnId` are present

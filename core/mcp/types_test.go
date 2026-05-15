@@ -6,6 +6,12 @@ import (
 	"testing"
 )
 
+func TestCodePolicyDeniedConstant(t *testing.T) {
+	if CodePolicyDenied != -32001 {
+		t.Fatalf("CodePolicyDenied = %d, want %d", CodePolicyDenied, -32001)
+	}
+}
+
 func TestNewErrorResponseBuildsJSONRPCErrorResponse(t *testing.T) {
 	id := json.RawMessage(`"req-1"`)
 

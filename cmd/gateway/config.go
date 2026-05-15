@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 const (
 	defaultGatewayPort     = 8080
+	defaultPolicyFilePath  = "policy.yaml"
 	defaultTurnIDHeader    = "X-Mcp-Turn-Id"
 	defaultUpstreamTimeout = 30 * time.Second
 	defaultSessionTTL      = 60 * time.Minute
@@ -16,6 +18,8 @@ const (
 
 type Config struct {
 	ListenPort      int
+	PolicyFilePath  string
+	PostgresDSN     string
 	UpstreamMCPURL  string
 	TurnIDHeader    string
 	UpstreamTimeout time.Duration
@@ -26,6 +30,10 @@ func LoadConfig() (*Config, error) {
 	upstreamURL := os.Getenv("UPSTREAM_MCP_URL")
 	if upstreamURL == "" {
 		return nil, fmt.Errorf("missing required environment variable UPSTREAM_MCP_URL")
+	}
+	postgresDSN := os.Getenv("POSTGRES_DSN")
+	if postgresDSN == "" {
+		return nil, fmt.Errorf("missing required environment variable POSTGRES_DSN")
 	}
 
 	listenPort, err := envInt("GATEWAY_PORT", defaultGatewayPort)
@@ -45,6 +53,8 @@ func LoadConfig() (*Config, error) {
 
 	return &Config{
 		ListenPort:      listenPort,
+		PolicyFilePath:  envStringWithInfoNotice("POLICY_FILE", defaultPolicyFilePath, "using default policy file path"),
+		PostgresDSN:     postgresDSN,
 		UpstreamMCPURL:  upstreamURL,
 		TurnIDHeader:    envString("TURN_ID_HEADER", defaultTurnIDHeader),
 		UpstreamTimeout: upstreamTimeout,
@@ -55,6 +65,15 @@ func LoadConfig() (*Config, error) {
 func envString(name, fallback string) string {
 	value := os.Getenv(name)
 	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func envStringWithInfoNotice(name, fallback, notice string) string {
+	value := os.Getenv(name)
+	if value == "" {
+		slog.Info(name+" not set; "+notice, "value", fallback)
 		return fallback
 	}
 	return value
