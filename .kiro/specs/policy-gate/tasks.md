@@ -63,7 +63,7 @@
   - _Depends: 1.5_
   - _Boundary: TicketStore_
 
-- [ ] 2.4 Build the policy gate pipeline handler with embedded budget tracker
+- [x] 2.4 Build the policy gate pipeline handler with embedded budget tracker
   - Implement `BudgetTracker` with a `sync.Mutex`-guarded `map[string]int` (key `sessionID + ":" + turnID`) and an `IncrementAndGet(sessionID, turnID) int` method that atomically increments and returns the new count
   - Implement `PolicyGateHandler.Handle` following the design's execution sequence: (a) passthrough non-`tools/call` requests with `(nil, nil)`; (b) extract `sessionID`/`turnID` from context using `mcp.SessionIDFromContext` / `mcp.TurnIDFromContext`; (c) parse `toolName` and raw `arguments` from `req.Params` (return `-32603` on malformed); (d) increment budget and, if over `policy.Budgets.MaxToolCallsPerTurn`, write a `budgetExceeded` audit record with `Reason = "maxToolCallsPerTurn exceeded"` and return `-32001`; (e) otherwise call `Evaluate`, write the audit record with the evaluated decision before returning, and dispatch on the decision
   - Decision dispatch: `allow` → return `(nil, nil)`; `deny` → return `NewErrorResponse(req.ID, CodePolicyDenied, "denied by policy")`; `approvalRequired` → call `TicketStore.Insert(ctx, TicketRecord{..., ExpiresAt: time.Now().Add(5 * time.Minute)})`, log WARN on insert error, return a synthetic pending response of shape `{"jsonrpc":"2.0","id":<original>,"result":{"status":"pending","message":"tool call requires human approval"}}`
