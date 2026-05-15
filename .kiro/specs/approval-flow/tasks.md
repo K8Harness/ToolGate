@@ -16,7 +16,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 5.2_
 
 - [ ] 2. Core — approval-flow components
-- [ ] 2.1 (P) Build the approval hold bridge
+- [x] 2.1 (P) Build the approval hold bridge
   - Implement the `ApprovalBridge` interface with a method that blocks the calling goroutine until a resume signal is received, the context is cancelled, or a 5-minute timeout fires
   - The concrete implementation subscribes to a per-ticket notification channel on Redis when the wait begins; the subscription is cleaned up on any exit path
   - While waiting, a ticker periodically calls the session mutex TTL extension; extension failures are logged but do not abort the wait
