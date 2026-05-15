@@ -8,6 +8,7 @@ import (
 // Standard JSON-RPC error codes used by the gateway.
 const (
 	CodeParseError    = -32700
+	CodePolicyDenied  = -32001
 	CodeInternalError = -32603
 )
 

@@ -8,7 +8,7 @@
   - _Requirements: 1.5, 8.4_
   - _Boundary: Module dependencies_
 
-- [ ] 1.2 (P) Add policy-denied JSON-RPC error code constant
+- [x] 1.2 (P) Add policy-denied JSON-RPC error code constant
   - Add `CodePolicyDenied = -32001` alongside the existing `CodeParseError` and `CodeInternalError` constants in `core/mcp`
   - Observable: importing `core/mcp` from `cmd/gateway` exposes `CodePolicyDenied`; `go build ./...` succeeds
   - _Requirements: 5.1_
