@@ -45,7 +45,7 @@
   - _Requirements: 1.3, 1.4, 1.5, 3.1, 3.3, 3.4_
   - _Boundary: core/policy_
 
-- [ ] 2.2 (P) Build the asynchronous audit log writer
+- [x] 2.2 (P) Build the asynchronous audit log writer
   - Define `AuditRecord` (sessionID, turnID, toolName, arguments, decision, reason) and an `AuditWriter` that owns a buffered channel of capacity 256 and a `Start(ctx)` goroutine that drains the channel into `audit_log` via the configured `pgxpool`
   - `Write` is non-blocking: it enqueues on the channel via `select { case ch <- r: default: warn }`; if the channel is full, log a WARN and drop the record
   - The drain goroutine inserts each record using the documented SQL (`INSERT INTO audit_log (session_id, turn_id, tool_name, arguments, decision, reason) VALUES ($1..$6)`) and exits cleanly when the supplied context is cancelled
