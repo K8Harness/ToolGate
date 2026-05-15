@@ -9,21 +9,26 @@ import (
 )
 
 const (
-	defaultGatewayPort     = 8080
-	defaultPolicyFilePath  = "policy.yaml"
-	defaultTurnIDHeader    = "X-Mcp-Turn-Id"
-	defaultUpstreamTimeout = 30 * time.Second
-	defaultSessionTTL      = 60 * time.Minute
+	defaultGatewayPort        = 8080
+	defaultPolicyFilePath     = "policy.yaml"
+	defaultTurnIDHeader       = "X-Mcp-Turn-Id"
+	defaultUpstreamTimeout    = 30 * time.Second
+	defaultSessionTTL         = 60 * time.Minute
+	defaultSessionLockTTL     = 60 * time.Second
+	defaultLockAcquireTimeout = 5 * time.Second
 )
 
 type Config struct {
-	ListenPort      int
-	PolicyFilePath  string
-	PostgresDSN     string
-	UpstreamMCPURL  string
-	TurnIDHeader    string
-	UpstreamTimeout time.Duration
-	SessionTTL      time.Duration
+	ListenPort         int
+	PolicyFilePath     string
+	PostgresDSN        string
+	RedisDSN           string
+	UpstreamMCPURL     string
+	TurnIDHeader       string
+	UpstreamTimeout    time.Duration
+	SessionTTL         time.Duration
+	SessionLockTTL     time.Duration
+	LockAcquireTimeout time.Duration
 }
 
 func LoadConfig() (*Config, error) {
@@ -34,6 +39,10 @@ func LoadConfig() (*Config, error) {
 	postgresDSN := os.Getenv("POSTGRES_DSN")
 	if postgresDSN == "" {
 		return nil, fmt.Errorf("missing required environment variable POSTGRES_DSN")
+	}
+	redisDSN := os.Getenv("REDIS_DSN")
+	if redisDSN == "" {
+		return nil, fmt.Errorf("missing required environment variable REDIS_DSN")
 	}
 
 	listenPort, err := envInt("GATEWAY_PORT", defaultGatewayPort)
@@ -51,14 +60,27 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
+	sessionLockTTL, err := envDuration("SESSION_LOCK_TTL", defaultSessionLockTTL)
+	if err != nil {
+		return nil, err
+	}
+
+	lockAcquireTimeout, err := envDuration("LOCK_ACQUIRE_TIMEOUT", defaultLockAcquireTimeout)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Config{
-		ListenPort:      listenPort,
-		PolicyFilePath:  envStringWithInfoNotice("POLICY_FILE", defaultPolicyFilePath, "using default policy file path"),
-		PostgresDSN:     postgresDSN,
-		UpstreamMCPURL:  upstreamURL,
-		TurnIDHeader:    envString("TURN_ID_HEADER", defaultTurnIDHeader),
-		UpstreamTimeout: upstreamTimeout,
-		SessionTTL:      sessionTTL,
+		ListenPort:         listenPort,
+		PolicyFilePath:     envStringWithInfoNotice("POLICY_FILE", defaultPolicyFilePath, "using default policy file path"),
+		PostgresDSN:        postgresDSN,
+		RedisDSN:           redisDSN,
+		UpstreamMCPURL:     upstreamURL,
+		TurnIDHeader:       envString("TURN_ID_HEADER", defaultTurnIDHeader),
+		UpstreamTimeout:    upstreamTimeout,
+		SessionTTL:         sessionTTL,
+		SessionLockTTL:     sessionLockTTL,
+		LockAcquireTimeout: lockAcquireTimeout,
 	}, nil
 }
 

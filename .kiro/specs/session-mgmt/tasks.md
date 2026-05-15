@@ -1,7 +1,7 @@
 # Implementation Plan
 
 - [ ] 1. Foundation — dependency, configuration, and shared constants
-- [ ] 1.1 Add go-redis/v9 dependency and extend gateway config with Redis fields
+- [x] 1.1 Add go-redis/v9 dependency and extend gateway config with Redis fields
   - Run `go get github.com/redis/go-redis/v9@v9.19.0`; confirm entry appears in go.mod and go.sum
   - Add `RedisDSN string` (env `REDIS_DSN`), `SessionLockTTL time.Duration` (env `SESSION_LOCK_TTL`, default `60s`), and `LockAcquireTimeout time.Duration` (env `LOCK_ACQUIRE_TIMEOUT`, default `5s`) to the `Config` struct in `cmd/gateway/config.go`
   - Add startup validation: return a descriptive error if `REDIS_DSN` is empty

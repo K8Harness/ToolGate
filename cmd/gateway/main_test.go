@@ -33,9 +33,26 @@ func TestRunGatewayReturnsErrorWhenConfigMissing(t *testing.T) {
 	}
 }
 
+func TestRunGatewayReturnsErrorWhenRedisDSNMissing(t *testing.T) {
+	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
+	t.Setenv("POSTGRES_DSN", "postgres://localhost:5432/toolgate?sslmode=disable")
+	t.Setenv("REDIS_DSN", "")
+
+	var stderr bytes.Buffer
+	code := runGateway(&stderr)
+
+	if code != 1 {
+		t.Fatalf("runGateway() code = %d, want 1", code)
+	}
+	if got := stderr.String(); !strings.Contains(got, "REDIS_DSN") {
+		t.Fatalf("stderr = %q, want missing REDIS_DSN error", got)
+	}
+}
+
 func TestRunGatewayFatalfsWhenPolicyLoadFails(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://localhost:5432/toolgate?sslmode=disable")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
 	t.Setenv("POLICY_FILE", filepath.Join(t.TempDir(), "missing-policy.yaml"))
 
 	message := interceptFatalf(t, func() {
@@ -53,6 +70,7 @@ func TestRunGatewayFatalfsWhenPolicyLoadFails(t *testing.T) {
 func TestRunGatewayFatalfsWhenPolicyYAMLIsInvalid(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://localhost:5432/toolgate?sslmode=disable")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
 	t.Setenv("POLICY_FILE", writePolicyFile(t, "rules: ["))
 
 	message := interceptFatalf(t, func() {
@@ -70,6 +88,7 @@ func TestRunGatewayFatalfsWhenPolicyYAMLIsInvalid(t *testing.T) {
 func TestRunGatewayFatalfsWhenPostgresInitFails(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://127.0.0.1:1/toolgate?sslmode=disable&connect_timeout=1")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
 	t.Setenv("POLICY_FILE", writePolicyFile(t, `
 defaultAction: deny
 budgets:
