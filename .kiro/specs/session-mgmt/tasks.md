@@ -32,7 +32,7 @@
   - _Requirements: 4.1, 4.2_
   - _Boundary: OperationClassifier_
 
-- [ ] 2.2 (P) Build the SessionLocker with reference-counted Redis mutex
+- [x] 2.2 (P) Build the SessionLocker with reference-counted Redis mutex
   - Implement `LockTimeoutError` struct in `cmd/gateway/session_locker.go`; it must implement `Error() string` and `JSONRPCCode() int` returning `mcp.CodeSessionBusy` (-32002)
   - Implement `SessionLocker` with `NewSessionLocker(rdb *redis.Client, lockTTL, acquireTimeout time.Duration) *SessionLocker`
   - `Acquire(ctx, sessionID, turnID string) error`: Lua script — if `session:<id>:lock` absent → SET value=turnID + EX TTL + init `session:<id>:refcount`=1; if value matches turnID → INCR refcount + EXPIRE both keys; else → return 0 (blocked); busy-wait at 50ms intervals until acquired or `acquireTimeout` elapses, then return `LockTimeoutError`
