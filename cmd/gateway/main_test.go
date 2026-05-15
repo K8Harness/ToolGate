@@ -53,6 +53,9 @@ func TestRunGatewayFatalfsWhenPolicyLoadFails(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://localhost:5432/toolgate?sslmode=disable")
 	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "test-signing-secret")
+	t.Setenv("SLACK_CHANNEL", "#approvals")
 	t.Setenv("POLICY_FILE", filepath.Join(t.TempDir(), "missing-policy.yaml"))
 
 	message := interceptFatalf(t, func() {
@@ -71,6 +74,9 @@ func TestRunGatewayFatalfsWhenPolicyYAMLIsInvalid(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://localhost:5432/toolgate?sslmode=disable")
 	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "test-signing-secret")
+	t.Setenv("SLACK_CHANNEL", "#approvals")
 	t.Setenv("POLICY_FILE", writePolicyFile(t, "rules: ["))
 
 	message := interceptFatalf(t, func() {
@@ -89,6 +95,9 @@ func TestRunGatewayFatalfsWhenPostgresInitFails(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://127.0.0.1:1/toolgate?sslmode=disable&connect_timeout=1")
 	t.Setenv("REDIS_DSN", testRedisDSN(t))
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "test-signing-secret")
+	t.Setenv("SLACK_CHANNEL", "#approvals")
 	t.Setenv("POLICY_FILE", writePolicyFile(t, `
 defaultAction: deny
 budgets:

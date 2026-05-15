@@ -43,6 +43,9 @@ func TestLoadConfigDefaultsWithOnlyUpstreamMCPURL(t *testing.T) {
 	t.Setenv("SESSION_TTL", "")
 	t.Setenv("SESSION_LOCK_TTL", "")
 	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-default-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "default-signing-secret")
+	t.Setenv("SLACK_CHANNEL", "#approvals")
 
 	var logs bytes.Buffer
 	restoreDefaultLogger := setDefaultLoggerForTest(&logs)
@@ -104,6 +107,9 @@ func TestLoadConfigReadsEnvironmentOverrides(t *testing.T) {
 	t.Setenv("SESSION_TTL", "2h")
 	t.Setenv("SESSION_LOCK_TTL", "90s")
 	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "7s")
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-override-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "override-signing-secret")
+	t.Setenv("SLACK_CHANNEL", "#override-approvals")
 
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -186,6 +192,157 @@ func TestLoadConfigRequiresRedisDSN(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "REDIS_DSN") {
 		t.Fatalf("LoadConfig() error = %q, want message naming REDIS_DSN", err.Error())
+	}
+}
+
+func TestLoadConfigRequiresSlackBotToken(t *testing.T) {
+	t.Setenv("GATEWAY_PORT", "")
+	t.Setenv("POLICY_FILE", "")
+	t.Setenv("POSTGRES_DSN", "postgres://gateway:gateway@localhost:5432/gateway?sslmode=disable")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("UPSTREAM_MCP_URL", "http://upstream.example/mcp")
+	t.Setenv("TURN_ID_HEADER", "")
+	t.Setenv("UPSTREAM_TIMEOUT", "")
+	t.Setenv("SESSION_TTL", "")
+	t.Setenv("SESSION_LOCK_TTL", "")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
+	t.Setenv("SLACK_BOT_TOKEN", "")
+	t.Setenv("SLACK_SIGNING_SECRET", "xsecret")
+	t.Setenv("SLACK_CHANNEL", "#approvals")
+
+	cfg, err := LoadConfig()
+	if err == nil {
+		t.Fatalf("LoadConfig() error = nil, want missing SLACK_BOT_TOKEN error")
+	}
+	if cfg != nil {
+		t.Fatalf("LoadConfig() config = %#v, want nil config on error", cfg)
+	}
+	if !strings.Contains(err.Error(), "SLACK_BOT_TOKEN") {
+		t.Fatalf("LoadConfig() error = %q, want message naming SLACK_BOT_TOKEN", err.Error())
+	}
+}
+
+func TestLoadConfigRequiresSlackSigningSecret(t *testing.T) {
+	t.Setenv("GATEWAY_PORT", "")
+	t.Setenv("POLICY_FILE", "")
+	t.Setenv("POSTGRES_DSN", "postgres://gateway:gateway@localhost:5432/gateway?sslmode=disable")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("UPSTREAM_MCP_URL", "http://upstream.example/mcp")
+	t.Setenv("TURN_ID_HEADER", "")
+	t.Setenv("UPSTREAM_TIMEOUT", "")
+	t.Setenv("SESSION_TTL", "")
+	t.Setenv("SESSION_LOCK_TTL", "")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "")
+	t.Setenv("SLACK_CHANNEL", "#approvals")
+
+	cfg, err := LoadConfig()
+	if err == nil {
+		t.Fatalf("LoadConfig() error = nil, want missing SLACK_SIGNING_SECRET error")
+	}
+	if cfg != nil {
+		t.Fatalf("LoadConfig() config = %#v, want nil config on error", cfg)
+	}
+	if !strings.Contains(err.Error(), "SLACK_SIGNING_SECRET") {
+		t.Fatalf("LoadConfig() error = %q, want message naming SLACK_SIGNING_SECRET", err.Error())
+	}
+}
+
+func TestLoadConfigRequiresSlackChannel(t *testing.T) {
+	t.Setenv("GATEWAY_PORT", "")
+	t.Setenv("POLICY_FILE", "")
+	t.Setenv("POSTGRES_DSN", "postgres://gateway:gateway@localhost:5432/gateway?sslmode=disable")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("UPSTREAM_MCP_URL", "http://upstream.example/mcp")
+	t.Setenv("TURN_ID_HEADER", "")
+	t.Setenv("UPSTREAM_TIMEOUT", "")
+	t.Setenv("SESSION_TTL", "")
+	t.Setenv("SESSION_LOCK_TTL", "")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "xsecret")
+	t.Setenv("SLACK_CHANNEL", "")
+
+	cfg, err := LoadConfig()
+	if err == nil {
+		t.Fatalf("LoadConfig() error = nil, want missing SLACK_CHANNEL error")
+	}
+	if cfg != nil {
+		t.Fatalf("LoadConfig() config = %#v, want nil config on error", cfg)
+	}
+	if !strings.Contains(err.Error(), "SLACK_CHANNEL") {
+		t.Fatalf("LoadConfig() error = %q, want message naming SLACK_CHANNEL", err.Error())
+	}
+}
+
+func TestLoadConfigReportsAllMissingSlackVars(t *testing.T) {
+	t.Setenv("GATEWAY_PORT", "")
+	t.Setenv("POLICY_FILE", "")
+	t.Setenv("POSTGRES_DSN", "postgres://gateway:gateway@localhost:5432/gateway?sslmode=disable")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("UPSTREAM_MCP_URL", "http://upstream.example/mcp")
+	t.Setenv("TURN_ID_HEADER", "")
+	t.Setenv("UPSTREAM_TIMEOUT", "")
+	t.Setenv("SESSION_TTL", "")
+	t.Setenv("SESSION_LOCK_TTL", "")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
+	t.Setenv("SLACK_BOT_TOKEN", "")
+	t.Setenv("SLACK_SIGNING_SECRET", "")
+	t.Setenv("SLACK_CHANNEL", "")
+
+	cfg, err := LoadConfig()
+	if err == nil {
+		t.Fatalf("LoadConfig() error = nil, want missing Slack vars error")
+	}
+	if cfg != nil {
+		t.Fatalf("LoadConfig() config = %#v, want nil config on error", cfg)
+	}
+	if !strings.Contains(err.Error(), "SLACK_BOT_TOKEN") {
+		t.Fatalf("LoadConfig() error = %q, want message naming SLACK_BOT_TOKEN", err.Error())
+	}
+	if !strings.Contains(err.Error(), "SLACK_SIGNING_SECRET") {
+		t.Fatalf("LoadConfig() error = %q, want message naming SLACK_SIGNING_SECRET", err.Error())
+	}
+	if !strings.Contains(err.Error(), "SLACK_CHANNEL") {
+		t.Fatalf("LoadConfig() error = %q, want message naming SLACK_CHANNEL", err.Error())
+	}
+}
+
+func TestLoadConfigReadsSlackVars(t *testing.T) {
+	t.Setenv("GATEWAY_PORT", "")
+	t.Setenv("POLICY_FILE", "")
+	t.Setenv("POSTGRES_DSN", "postgres://gateway:gateway@localhost:5432/gateway?sslmode=disable")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("UPSTREAM_MCP_URL", "http://upstream.example/mcp")
+	t.Setenv("TURN_ID_HEADER", "")
+	t.Setenv("UPSTREAM_TIMEOUT", "")
+	t.Setenv("SESSION_TTL", "")
+	t.Setenv("SESSION_LOCK_TTL", "")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "test-signing-secret")
+	t.Setenv("SLACK_CHANNEL", "#test-approvals")
+
+	var logs bytes.Buffer
+	restoreDefaultLogger := setDefaultLoggerForTest(&logs)
+	defer restoreDefaultLogger()
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v, want nil", err)
+	}
+	if cfg == nil {
+		t.Fatalf("LoadConfig() config = nil, want config")
+	}
+	if cfg.SlackBotToken != "xoxb-test-token" {
+		t.Fatalf("SlackBotToken = %q, want xoxb-test-token", cfg.SlackBotToken)
+	}
+	if cfg.SlackSigningSecret != "test-signing-secret" {
+		t.Fatalf("SlackSigningSecret = %q, want test-signing-secret", cfg.SlackSigningSecret)
+	}
+	if cfg.SlackChannel != "#test-approvals" {
+		t.Fatalf("SlackChannel = %q, want #test-approvals", cfg.SlackChannel)
 	}
 }
 

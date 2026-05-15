@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -29,6 +30,9 @@ type Config struct {
 	SessionTTL         time.Duration
 	SessionLockTTL     time.Duration
 	LockAcquireTimeout time.Duration
+	SlackBotToken      string // SLACK_BOT_TOKEN     (required)
+	SlackSigningSecret string // SLACK_SIGNING_SECRET (required)
+	SlackChannel       string // SLACK_CHANNEL        (required)
 }
 
 func LoadConfig() (*Config, error) {
@@ -43,6 +47,23 @@ func LoadConfig() (*Config, error) {
 	redisDSN := os.Getenv("REDIS_DSN")
 	if redisDSN == "" {
 		return nil, fmt.Errorf("missing required environment variable REDIS_DSN")
+	}
+
+	slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
+	slackSigningSecret := os.Getenv("SLACK_SIGNING_SECRET")
+	slackChannel := os.Getenv("SLACK_CHANNEL")
+	var missingSlack []string
+	if slackBotToken == "" {
+		missingSlack = append(missingSlack, "SLACK_BOT_TOKEN")
+	}
+	if slackSigningSecret == "" {
+		missingSlack = append(missingSlack, "SLACK_SIGNING_SECRET")
+	}
+	if slackChannel == "" {
+		missingSlack = append(missingSlack, "SLACK_CHANNEL")
+	}
+	if len(missingSlack) > 0 {
+		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missingSlack, ", "))
 	}
 
 	listenPort, err := envInt("GATEWAY_PORT", defaultGatewayPort)
@@ -81,6 +102,9 @@ func LoadConfig() (*Config, error) {
 		SessionTTL:         sessionTTL,
 		SessionLockTTL:     sessionLockTTL,
 		LockAcquireTimeout: lockAcquireTimeout,
+		SlackBotToken:      slackBotToken,
+		SlackSigningSecret: slackSigningSecret,
+		SlackChannel:       slackChannel,
 	}, nil
 }
 
