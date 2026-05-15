@@ -36,7 +36,7 @@
   - _Requirements: 2.1, 2.2, 2.4_
   - _Boundary: SlackClient_
 
-- [ ] 2.3 (P) Build the Slack webhook handler
+- [x] 2.3 (P) Build the Slack webhook handler
   - Implement the HTTP handler for `POST /slack/actions` that processes Slack interactive component action payloads
   - Read the raw request body into a buffer before any parsing (required by the signature verification algorithm)
   - Verify the Slack request signature: check that `X-Slack-Request-Timestamp` is within 5 minutes of current time, then compute HMAC-SHA256 over the signing base string and compare using constant-time comparison
