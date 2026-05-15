@@ -93,7 +93,7 @@
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
   - _Boundary: SessionLocker_
 
-- [ ] 4.3 (P) Unit tests for TurnRWLock
+- [x] 4.3 (P) Unit tests for TurnRWLock
   - Test two concurrent `ReadLock` calls → both return nil; `turn:<id>:readers` equals 2 in Redis
   - Test `WriteLock` call while readers > 0 → blocks; returns after `ReadUnlock`; readers counter equals 0 after unlock
   - Test two concurrent `WriteLock` calls → only one acquires the wlock key; second serialized and succeeds only after the first calls `WriteUnlock`

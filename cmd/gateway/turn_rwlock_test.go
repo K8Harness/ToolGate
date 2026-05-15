@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,25 +17,38 @@ func TestTurnRWLockConcurrentReadLocksShareReaderCount(t *testing.T) {
 	rwlock := NewTurnRWLock(client, 5*time.Second, 200*time.Millisecond)
 	turnID := uniqueSessionLockerID("turn-rw-readers")
 
+	var (
+		ready   sync.WaitGroup
+		release sync.WaitGroup
+	)
+	ready.Add(2)
+	release.Add(1)
+
 	errCh := make(chan error, 2)
 	start := make(chan struct{})
 
 	for range 2 {
 		go func() {
 			<-start
-			errCh <- rwlock.ReadLock(ctx, turnID)
+			err := rwlock.ReadLock(ctx, turnID)
+			if err == nil {
+				ready.Done()
+				release.Wait()
+			}
+			errCh <- err
 		}()
 	}
 
 	close(start)
+	waitForWaitGroup(t, &ready, 100*time.Millisecond, "both ReadLock goroutines to acquire without blocking")
+	assertRedisIntValue(t, client, turnReadersKey(turnID), 2)
+	release.Done()
 
 	for range 2 {
 		if err := <-errCh; err != nil {
 			t.Fatalf("ReadLock() error = %v, want nil", err)
 		}
 	}
-
-	assertRedisIntValue(t, client, turnReadersKey(turnID), 2)
 
 	if err := rwlock.ReadUnlock(ctx, turnID); err != nil {
 		t.Fatalf("ReadUnlock() first error = %v, want nil", err)
@@ -107,6 +121,7 @@ func TestTurnRWLockConcurrentWriteLocksSerialize(t *testing.T) {
 	if firstToken == "" {
 		t.Fatal("WriteLock() first token = empty, want non-empty owner token")
 	}
+	assertRedisStringValue(t, client, turnWriteLockKey(turnID), firstToken)
 
 	type writeResult struct {
 		token string
@@ -169,6 +184,22 @@ func TestTurnRWLockWriteUnlockWrongTokenKeepsWriterLock(t *testing.T) {
 	}
 
 	assertRedisKeyAbsent(t, client, turnWriteLockKey(turnID))
+}
+
+func waitForWaitGroup(t *testing.T, wg *sync.WaitGroup, timeout time.Duration, description string) {
+	t.Helper()
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		t.Fatalf("timed out waiting for %s", description)
+	}
 }
 
 func assertRedisStringValue(t *testing.T, client *redis.Client, key, want string) {
