@@ -42,7 +42,7 @@
   - _Requirements: 1.1, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
   - _Boundary: SessionLocker_
 
-- [ ] 2.3 (P) Build the TurnRWLock with per-turn reader-writer lock
+- [x] 2.3 (P) Build the TurnRWLock with per-turn reader-writer lock
   - Implement `TurnRWLock` in `cmd/gateway/turn_rwlock.go` with `NewTurnRWLock(rdb *redis.Client, lockTTL, acquireTimeout time.Duration) *TurnRWLock`
   - `ReadLock(ctx, turnID string) error`: Lua script — if `turn:<id>:wlock` absent → INCR `turn:<id>:readers` + EXPIRE; else → return 0 (blocked); busy-wait until timeout
   - `ReadUnlock(ctx, turnID string) error`: Lua script — DECR `turn:<id>:readers`
