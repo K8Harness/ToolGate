@@ -12,6 +12,12 @@ func TestCodePolicyDeniedConstant(t *testing.T) {
 	}
 }
 
+func TestCodeSessionBusyConstant(t *testing.T) {
+	if CodeSessionBusy != -32002 {
+		t.Fatalf("CodeSessionBusy = %d, want %d", CodeSessionBusy, -32002)
+	}
+}
+
 func TestNewErrorResponseBuildsJSONRPCErrorResponse(t *testing.T) {
 	id := json.RawMessage(`"req-1"`)
 

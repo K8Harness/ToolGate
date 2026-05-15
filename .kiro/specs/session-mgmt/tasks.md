@@ -15,11 +15,12 @@
   - Observable (factory): gateway startup log confirms Redis connectivity; starting with an unreachable Redis address returns an error before the HTTP server binds
   - _Requirements: 2.4_
 
-- [ ] 1.3 Add CodeSessionBusy error code and OperationClasses field to AgentPolicy
+- [x] 1.3 Add CodeSessionBusy error code and OperationClasses field to AgentPolicy
   - Add `CodeSessionBusy = -32002` constant to `core/mcp/types.go`
-  - Add `OperationClasses map[string]string \`yaml:"operationClasses"\`` to the `AgentPolicy` struct in `cmd/gateway/policy_gate.go`; update the YAML loader to parse it (valid values: `"read"`, `"write"`)
+  - Add `OperationClasses map[string]string \`yaml:"operationClasses"\`` to the `AgentPolicy` struct in `core/policy/policy.go` (where AgentPolicy is defined); `cmd/gateway/policy_gate.go` only consumes `*corepolicy.AgentPolicy` and does not own the struct — no change needed there for this field
   - Observable: a `policy.yaml` containing an `operationClasses` block loads without error and the field is populated; `mcp.CodeSessionBusy` is accessible from the `core/mcp` package and equals `-32002`
   - _Requirements: 4.1_
+  - _Note: task.md originally named `cmd/gateway/policy_gate.go` as the edit site; corrected to `core/policy/policy.go` to match code reality (design.md §Allowed Dependencies: "may extend but not restructure")_
 
 - [ ] 2. Core lock primitives and operation classifier
 - [ ] 2.1 (P) Build the OperationClassifier

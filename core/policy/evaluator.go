@@ -53,12 +53,27 @@ func validatePolicy(policy *AgentPolicy) error {
 		}
 	}
 
+	for operation, class := range policy.OperationClasses {
+		if !isOperationClass(class) {
+			return fmt.Errorf("operationClasses[%q] %q is invalid", operation, class)
+		}
+	}
+
 	return nil
 }
 
 func isRuleAction(action Action) bool {
 	switch action {
 	case ActionAllow, ActionDeny, ActionApprovalRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+func isOperationClass(class string) bool {
+	switch class {
+	case "read", "write":
 		return true
 	default:
 		return false

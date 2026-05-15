@@ -121,6 +121,30 @@ defaultAction: deny
 		}
 	})
 
+	t.Run("invalid operation class is rejected", func(t *testing.T) {
+		path := writePolicyFile(t, `
+rules:
+  - tool: refund_small
+    action: allow
+budgets:
+  maxToolCallsPerTurn: 5
+defaultAction: deny
+operationClasses:
+  get_customer: maybe
+`)
+
+		got, err := LoadPolicy(path)
+		if err == nil {
+			t.Fatal("LoadPolicy error = nil, want error")
+		}
+		if got != nil {
+			t.Fatalf("LoadPolicy policy = %#v, want nil", got)
+		}
+		if !strings.Contains(err.Error(), "operationClasses") {
+			t.Fatalf("LoadPolicy error = %q, want mention of operationClasses", err.Error())
+		}
+	})
+
 	t.Run("valid policy loads expected fields", func(t *testing.T) {
 		path := writePolicyFile(t, `
 rules:
@@ -165,6 +189,39 @@ defaultAction: deny
 		}
 		if got.DefaultAction != want.DefaultAction {
 			t.Fatalf("DefaultAction = %q, want %q", got.DefaultAction, want.DefaultAction)
+		}
+	})
+
+	t.Run("operation classes load into agent policy", func(t *testing.T) {
+		path := writePolicyFile(t, `
+rules:
+  - tool: refund_small
+    action: allow
+budgets:
+  maxToolCallsPerTurn: 5
+defaultAction: deny
+operationClasses:
+  get_customer: read
+  create_refund: write
+`)
+
+		got, err := LoadPolicy(path)
+		if err != nil {
+			t.Fatalf("LoadPolicy error = %v, want nil", err)
+		}
+
+		want := map[string]string{
+			"get_customer":  "read",
+			"create_refund": "write",
+		}
+
+		if len(got.OperationClasses) != len(want) {
+			t.Fatalf("len(OperationClasses) = %d, want %d", len(got.OperationClasses), len(want))
+		}
+		for operation, wantClass := range want {
+			if got.OperationClasses[operation] != wantClass {
+				t.Fatalf("OperationClasses[%q] = %q, want %q", operation, got.OperationClasses[operation], wantClass)
+			}
 		}
 	})
 }
