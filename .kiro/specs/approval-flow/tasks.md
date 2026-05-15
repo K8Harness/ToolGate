@@ -27,7 +27,7 @@
   - _Requirements: 1.1, 1.2, 1.5, 5.1, 5.2, 5.3, 5.4_
   - _Boundary: RedisApprovalBridge_
 
-- [ ] 2.2 (P) Build the Slack approval notifier
+- [x] 2.2 (P) Build the Slack approval notifier
   - Implement the `SlackNotifier` interface with a method that sends a Block Kit message to the configured Slack channel
   - The message body includes tool name, operation, call arguments, and session ID in a section block
   - The message includes an Approve button and a Deny button in an actions block; the ticket ID is embedded as the button value for each
