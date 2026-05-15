@@ -1,0 +1,35 @@
+services:
+  gateway:
+    image: golang:1.25
+    working_dir: /workspace
+    command: ["go", "run", "./cmd/gateway"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GATEWAY_PORT: "8080"
+      POLICY_FILE: policy.yaml
+      POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
+      UPSTREAM_MCP_URL: http://host.docker.internal:8081/mcp
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/workspace
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:

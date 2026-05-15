@@ -21,7 +21,7 @@
   - _Requirements: 1.1, 1.2, 8.4_
   - _Boundary: Config_
 
-- [ ] 1.4 (P) Define Docker Compose service for Postgres and gateway environment wiring
+- [x] 1.4 (P) Define Docker Compose service for Postgres and gateway environment wiring
   - Add a `postgres:16` service with a persistent volume, container health check, and credentials matching the documented `POSTGRES_DSN`
   - Wire the gateway service environment to point `POSTGRES_DSN` at the compose-internal Postgres host
   - Observable: `docker compose config` validates without errors; `docker compose up postgres` reports the service as `healthy`
