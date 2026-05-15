@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Foundation — module dependencies, error code, config, infrastructure, schema
+- [x] 1. Foundation — module dependencies, error code, config, infrastructure, schema
 - [x] 1.1 Add Go module dependencies for YAML and Postgres
   - Run `go get gopkg.in/yaml.v3` and `go get github.com/jackc/pgx/v5` (which provides `github.com/jackc/pgx/v5/pgxpool`); run `go mod tidy`
   - Commit updated `go.mod` and `go.sum`
@@ -36,7 +36,7 @@
   - _Requirements: 8.2, 8.4, 9.1_
   - _Boundary: DB_
 
-- [ ] 2. Core — policy engine and Postgres-backed stores
+- [x] 2. Core — policy engine and Postgres-backed stores
 - [x] 2.1 (P) Build the in-process policy package: types, YAML loader, ordered evaluator
   - Define `Action`, `PolicyRule`, `Budgets`, `AgentPolicy`, and `PolicyDecision` types with YAML struct tags matching the design contract
   - Implement `LoadPolicy` with strict YAML decoding (`KnownFields(true)`) and a post-decode validation pass that rejects empty `Tool` names, invalid `Action` values, and a `DefaultAction` of `approvalRequired`
@@ -73,7 +73,7 @@
   - _Depends: 1.2_
   - _Boundary: PolicyGateHandler, BudgetTracker_
 
-- [ ] 3. Integration — startup sequence and pipeline registration
+- [x] 3. Integration — startup sequence and pipeline registration
 - [x] 3.1 Wire policy loading, DB pool, schema migration, and PolicyGateHandler into the gateway binary
   - In `main.go`, sequence: `LoadConfig()` → `LoadPolicy(cfg.PolicyFilePath)` → `NewDBPool(ctx, cfg.PostgresDSN)` → `MigrateSchema(ctx, pool)` → construct `BudgetTracker`, `AuditWriter` (call `Start(ctx)`), `TicketStore`, `PolicyGateHandler` → register pipeline handlers via `pipeline.Use` in the order `RequestLogger`, `ContextInjector`, `PolicyGateHandler`, with `UpstreamForwarder` set as the terminal handler
   - Any failure in policy loading, pool initialization, ping, or schema migration must call `log.Fatalf` with a human-readable message identifying the failed check, before any port is bound
@@ -82,7 +82,7 @@
   - _Depends: 1.1, 1.3, 1.5, 2.1, 2.2, 2.3, 2.4_
   - _Boundary: main.go (integration)_
 
-- [ ] 4. Validation — unit, integration, and end-to-end tests
+- [x] 4. Validation — unit, integration, and end-to-end tests
 - [x] 4.1 (P) Unit tests for the policy package
   - `LoadPolicy`: missing file → error containing the path; YAML syntax error → error; unknown YAML field → error (KnownFields); invalid `defaultAction` (e.g., `approvalRequired`) → validation error; valid policy → `AgentPolicy` fields match the input
   - `Evaluate`: first rule matches → returns that action; first rule does not match but second does → returns the second; no rule matches → returns `defaultAction`; empty rules list → returns `defaultAction`
