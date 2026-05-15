@@ -1,0 +1,21 @@
+{
+  "feature": "session-mgmt",
+  "language": "en",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "created_at": "2026-05-15",
+  "updated_at": "2026-05-15"
+}
