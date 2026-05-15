@@ -53,7 +53,7 @@
   - _Boundary: TurnRWLock_
 
 - [ ] 3. Integration — ConcurrencyGuard and server wiring
-- [ ] 3.1 Build ConcurrencyGuard combining all lock primitives
+- [x] 3.1 Build ConcurrencyGuard combining all lock primitives
   - Implement `ConcurrencyGuard` in `cmd/gateway/concurrency_guard.go` with `NewConcurrencyGuard(locker *SessionLocker, rwlock *TurnRWLock, classifier *OperationClassifier) *ConcurrencyGuard`
   - `Execute(ctx context.Context, sessionID, turnID, toolName string, fn func() (*mcp.JSONRPCResponse, error)) (*mcp.JSONRPCResponse, error)`: when `toolName` is empty (non-`tools/call` method), call `fn()` directly with no locking; otherwise classify toolName → acquire session mutex → acquire RWLock slot → call `fn()` → deferred release in reverse order (RWLock first, then session mutex)
   - Use `defer` for both releases; use `recover()` inside `Execute` to prevent panics from leaking held locks
