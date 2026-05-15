@@ -36,7 +36,7 @@ The decomposition uses **vertical slices**: each spec produces a runnable, testa
 ## Specs (dependency order)
 
 - [x] bare-proxy — Plain MCP proxy over SSE: SessionID generation, JSON-RPC forwarding, no policy. Dependencies: none
-- [ ] policy-gate — YAML policy engine in-process: allow/deny/approvalRequired predicates + Postgres audit log. Dependencies: bare-proxy
+- [x] policy-gate — YAML policy engine in-process: allow/deny/approvalRequired predicates + Postgres audit log. Dependencies: bare-proxy
 - [ ] session-mgmt — Redis session mutex + RWLock registry: same-session turn serialization, within-turn read/write concurrency. Dependencies: policy-gate
 - [ ] approval-flow — Slack approval bridge: Postgres ticket table, Slack Block Kit notification, Redis pub/sub resume, 5-minute timeout. Dependencies: session-mgmt
 - [ ] eval-gate — EvalSuite YAML runner CLI + Docker Compose + fake MCP servers + support-refund demo agent. Dependencies: approval-flow
