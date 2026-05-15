@@ -73,7 +73,7 @@
   - _Requirements: 2.3, 2.4, 4.1, 5.1_
 
 - [ ] 4. Validation — unit, integration, and end-to-end tests
-- [ ] 4.1 (P) Unit tests for OperationClassifier
+- [x] 4.1 (P) Unit tests for OperationClassifier
   - Test `Classify()` with an explicit `"read"` map entry → `OperationClassRead`
   - Test `Classify()` with an explicit `"write"` map entry → `OperationClassWrite`
   - Test `Classify()` with `get_`, `read_`, `list_` prefix and no map entry → `OperationClassRead` (heuristic)
