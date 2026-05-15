@@ -18,9 +18,10 @@ type Budgets struct {
 }
 
 type AgentPolicy struct {
-	Rules         []PolicyRule `yaml:"rules"`
-	Budgets       Budgets      `yaml:"budgets"`
-	DefaultAction Action       `yaml:"defaultAction"`
+	Rules            []PolicyRule      `yaml:"rules"`
+	Budgets          Budgets           `yaml:"budgets"`
+	DefaultAction    Action            `yaml:"defaultAction"`
+	OperationClasses map[string]string `yaml:"operationClasses"`
 }
 
 type PolicyDecision struct {

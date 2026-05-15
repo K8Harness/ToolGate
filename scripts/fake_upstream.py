@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
@@ -22,13 +23,17 @@ class Handler(BaseHTTPRequestHandler):
             }
         else:
             params = request.get("params") or {}
+            arguments = params.get("arguments") or {}
+            hold_ms = int(arguments.get("hold_ms", 0) or 0)
+            if hold_ms > 0:
+                time.sleep(hold_ms / 1000.0)
             response = {
                 "jsonrpc": "2.0",
                 "id": request.get("id"),
                 "result": {
                     "ok": True,
                     "tool": params.get("name"),
-                    "arguments": params.get("arguments"),
+                    "arguments": arguments,
                 },
             }
 

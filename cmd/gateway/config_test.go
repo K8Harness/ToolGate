@@ -12,10 +12,13 @@ func TestLoadConfigRequiresUpstreamMCPURL(t *testing.T) {
 	t.Setenv("GATEWAY_PORT", "")
 	t.Setenv("POLICY_FILE", "")
 	t.Setenv("POSTGRES_DSN", "postgres://gateway:gateway@localhost:5432/gateway?sslmode=disable")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
 	t.Setenv("UPSTREAM_MCP_URL", "")
 	t.Setenv("TURN_ID_HEADER", "")
 	t.Setenv("UPSTREAM_TIMEOUT", "")
 	t.Setenv("SESSION_TTL", "")
+	t.Setenv("SESSION_LOCK_TTL", "")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
 
 	cfg, err := LoadConfig()
 	if err == nil {
@@ -33,10 +36,13 @@ func TestLoadConfigDefaultsWithOnlyUpstreamMCPURL(t *testing.T) {
 	t.Setenv("GATEWAY_PORT", "")
 	t.Setenv("POLICY_FILE", "")
 	t.Setenv("POSTGRES_DSN", "postgres://gateway:gateway@localhost:5432/gateway?sslmode=disable")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
 	t.Setenv("UPSTREAM_MCP_URL", "http://upstream.example/mcp")
 	t.Setenv("TURN_ID_HEADER", "")
 	t.Setenv("UPSTREAM_TIMEOUT", "")
 	t.Setenv("SESSION_TTL", "")
+	t.Setenv("SESSION_LOCK_TTL", "")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
 
 	var logs bytes.Buffer
 	restoreDefaultLogger := setDefaultLoggerForTest(&logs)
@@ -70,6 +76,15 @@ func TestLoadConfigDefaultsWithOnlyUpstreamMCPURL(t *testing.T) {
 	if cfg.SessionTTL != 60*time.Minute {
 		t.Fatalf("SessionTTL = %s, want 60m", cfg.SessionTTL)
 	}
+	if cfg.RedisDSN != "redis://localhost:6379/0" {
+		t.Fatalf("RedisDSN = %q, want configured DSN", cfg.RedisDSN)
+	}
+	if cfg.SessionLockTTL != 60*time.Second {
+		t.Fatalf("SessionLockTTL = %s, want 60s", cfg.SessionLockTTL)
+	}
+	if cfg.LockAcquireTimeout != 5*time.Second {
+		t.Fatalf("LockAcquireTimeout = %s, want 5s", cfg.LockAcquireTimeout)
+	}
 	if !strings.Contains(logs.String(), "POLICY_FILE not set; using default policy file path") {
 		t.Fatalf("startup log = %q, want default policy file notice", logs.String())
 	}
@@ -82,10 +97,13 @@ func TestLoadConfigReadsEnvironmentOverrides(t *testing.T) {
 	t.Setenv("GATEWAY_PORT", "9090")
 	t.Setenv("POLICY_FILE", "/tmp/policy.yaml")
 	t.Setenv("POSTGRES_DSN", "postgres://localhost:5432/toolgate")
+	t.Setenv("REDIS_DSN", "redis://localhost:6380/1")
 	t.Setenv("UPSTREAM_MCP_URL", "http://localhost:9999/mcp")
 	t.Setenv("TURN_ID_HEADER", "X-Turn")
 	t.Setenv("UPSTREAM_TIMEOUT", "5s")
 	t.Setenv("SESSION_TTL", "2h")
+	t.Setenv("SESSION_LOCK_TTL", "90s")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "7s")
 
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -112,16 +130,28 @@ func TestLoadConfigReadsEnvironmentOverrides(t *testing.T) {
 	if cfg.SessionTTL != 2*time.Hour {
 		t.Fatalf("SessionTTL = %s, want 2h", cfg.SessionTTL)
 	}
+	if cfg.RedisDSN != "redis://localhost:6380/1" {
+		t.Fatalf("RedisDSN = %q, want override", cfg.RedisDSN)
+	}
+	if cfg.SessionLockTTL != 90*time.Second {
+		t.Fatalf("SessionLockTTL = %s, want 90s", cfg.SessionLockTTL)
+	}
+	if cfg.LockAcquireTimeout != 7*time.Second {
+		t.Fatalf("LockAcquireTimeout = %s, want 7s", cfg.LockAcquireTimeout)
+	}
 }
 
 func TestLoadConfigRequiresPostgresDSN(t *testing.T) {
 	t.Setenv("GATEWAY_PORT", "")
 	t.Setenv("POLICY_FILE", "")
 	t.Setenv("POSTGRES_DSN", "")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
 	t.Setenv("UPSTREAM_MCP_URL", "http://upstream.example/mcp")
 	t.Setenv("TURN_ID_HEADER", "")
 	t.Setenv("UPSTREAM_TIMEOUT", "")
 	t.Setenv("SESSION_TTL", "")
+	t.Setenv("SESSION_LOCK_TTL", "")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
 
 	cfg, err := LoadConfig()
 	if err == nil {
@@ -132,6 +162,30 @@ func TestLoadConfigRequiresPostgresDSN(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "POSTGRES_DSN") {
 		t.Fatalf("LoadConfig() error = %q, want message naming POSTGRES_DSN", err.Error())
+	}
+}
+
+func TestLoadConfigRequiresRedisDSN(t *testing.T) {
+	t.Setenv("GATEWAY_PORT", "")
+	t.Setenv("POLICY_FILE", "")
+	t.Setenv("POSTGRES_DSN", "postgres://gateway:gateway@localhost:5432/gateway?sslmode=disable")
+	t.Setenv("REDIS_DSN", "")
+	t.Setenv("UPSTREAM_MCP_URL", "http://upstream.example/mcp")
+	t.Setenv("TURN_ID_HEADER", "")
+	t.Setenv("UPSTREAM_TIMEOUT", "")
+	t.Setenv("SESSION_TTL", "")
+	t.Setenv("SESSION_LOCK_TTL", "")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
+
+	cfg, err := LoadConfig()
+	if err == nil {
+		t.Fatalf("LoadConfig() error = nil, want missing REDIS_DSN error")
+	}
+	if cfg != nil {
+		t.Fatalf("LoadConfig() config = %#v, want nil config on error", cfg)
+	}
+	if !strings.Contains(err.Error(), "REDIS_DSN") {
+		t.Fatalf("LoadConfig() error = %q, want message naming REDIS_DSN", err.Error())
 	}
 }
 

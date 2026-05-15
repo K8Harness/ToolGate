@@ -9,6 +9,7 @@ import (
 const (
 	CodeParseError    = -32700
 	CodePolicyDenied  = -32001
+	CodeSessionBusy   = -32002
 	CodeInternalError = -32603
 )
 
