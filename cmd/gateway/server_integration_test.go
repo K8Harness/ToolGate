@@ -297,6 +297,87 @@ func TestGatewayIntegrationPanicIsolation(t *testing.T) {
 	}
 }
 
+func TestGatewayIntegrationToolsCallCreatesAndReleasesSessionLock(t *testing.T) {
+	ctx := context.Background()
+	dsn := testSchemaDSN(t, testPostgresDSN(t))
+	turnID := "turn-lock-check"
+
+	releaseUpstream := make(chan struct{})
+	upstreamStarted := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(upstreamStarted)
+		<-releaseUpstream
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":{"ok":true}}`))
+	}))
+	defer upstream.Close()
+
+	policyPath := writePolicyFile(t, `
+defaultAction: allow
+budgets:
+  maxToolCallsPerTurn: 3
+operationClasses:
+  refund: read
+rules:
+  - tool: refund
+    action: allow
+`)
+
+	config := &Config{
+		ListenPort:         8080,
+		PolicyFilePath:     policyPath,
+		PostgresDSN:        dsn,
+		RedisDSN:           testRedisDSN(t),
+		UpstreamMCPURL:     upstream.URL,
+		TurnIDHeader:       defaultTurnIDHeader,
+		UpstreamTimeout:    time.Second,
+		SessionTTL:         time.Minute,
+		SessionLockTTL:     time.Minute,
+		LockAcquireTimeout: 250 * time.Millisecond,
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	server, cleanup, err := buildGatewayServer(ctx, config, logger)
+	if err != nil {
+		t.Fatalf("buildGatewayServer() error = %v, want nil", err)
+	}
+	t.Cleanup(cleanup)
+
+	redisClient, err := NewRedisClient(*config)
+	if err != nil {
+		t.Fatalf("NewRedisClient() error = %v, want nil", err)
+	}
+	t.Cleanup(func() {
+		_ = redisClient.Close()
+	})
+
+	ts := httptest.NewServer(server)
+	defer ts.Close()
+
+	sessionID := initializeSession(t, ts.URL)
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		done <- postJSON(t, ts.URL+"/mcp", sessionID, turnID, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"refund"}}`)
+	}()
+
+	select {
+	case <-upstreamStarted:
+	case <-time.After(time.Second):
+		t.Fatal("tools/call did not reach upstream")
+	}
+
+	assertRedisStringValue(t, redisClient, sessionLockKey(sessionID), turnID)
+
+	close(releaseUpstream)
+
+	rec := <-done
+	if rec.Code != http.StatusOK {
+		t.Fatalf("tools/call status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	assertRedisKeyAbsent(t, redisClient, sessionLockKey(sessionID))
+}
+
 func newGatewayIntegrationServer(t *testing.T, upstreamURL string) *httptest.Server {
 	return newGatewayIntegrationServerWithExtraHandler(t, upstreamURL, nil)
 }

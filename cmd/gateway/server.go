@@ -28,6 +28,7 @@ type Server struct {
 	config    *Config
 	pipeline  *mcp.Pipeline
 	forwarder mcp.Handler
+	guard     *ConcurrencyGuard
 	sessions  *SessionRegistry
 	mux       *http.ServeMux
 	log       *slog.Logger
@@ -39,11 +40,11 @@ func NewServer(config *Config, pipeline *mcp.Pipeline, log *slog.Logger) *Server
 	}
 
 	server := &Server{
-		config:    config,
-		pipeline:  pipeline,
-		sessions:  &SessionRegistry{},
-		mux:       http.NewServeMux(),
-		log:       log,
+		config:   config,
+		pipeline: pipeline,
+		sessions: &SessionRegistry{},
+		mux:      http.NewServeMux(),
+		log:      log,
 	}
 	server.mux.HandleFunc("POST "+mcpRoutePath, server.handleMCPPost)
 	server.mux.HandleFunc("GET "+mcpRoutePath, server.handleMCPGet)
@@ -100,7 +101,14 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.pipeline.Run(r.Context(), req)
+	toolName := ""
+	if req.Method == "tools/call" {
+		if name, ok := toolNameFromParams(req.Params); ok {
+			toolName = name
+		}
+	}
+
+	resp, err := s.runPipeline(r.Context(), sessionID, toolName, req)
 	if err != nil {
 		if req.Method == "tools/call" {
 			NewRequestLogger(s.log).LogOutcome(r.Context(), req, nil, err)
@@ -113,6 +121,21 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 		NewRequestLogger(s.log).LogOutcome(r.Context(), req, resp, nil)
 	}
 	s.writeJSONResponse(w, resp)
+}
+
+func (s *Server) runPipeline(
+	ctx context.Context,
+	sessionID string,
+	toolName string,
+	req *mcp.JSONRPCRequest,
+) (*mcp.JSONRPCResponse, error) {
+	if s.guard == nil {
+		return s.pipeline.Run(ctx, req)
+	}
+
+	return s.guard.Execute(ctx, sessionID, mcp.TurnIDFromContext(ctx), toolName, func() (*mcp.JSONRPCResponse, error) {
+		return s.pipeline.Run(ctx, req)
+	})
 }
 
 func (s *Server) handleMCPGet(w http.ResponseWriter, r *http.Request) {

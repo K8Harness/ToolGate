@@ -55,6 +55,9 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 		return nil, nil, fmt.Errorf("policy load failed: %w", err)
 	}
 
+	// Session and turn locks are intentionally ephemeral Redis keys.
+	// After a gateway restart, any in-flight keys are only retained until TTL expiry,
+	// so new requests may acquire locks immediately in the new process.
 	redisClient, err := NewRedisClient(*config)
 	if err != nil {
 		return nil, nil, fmt.Errorf("redis initialization failed: %w", err)
@@ -82,6 +85,10 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 	auditWriter.Start(ctx)
 	ticketStore := NewTicketStore(pool)
 	policyGate := NewPolicyGateHandler(policy, budgetTracker, auditWriter, ticketStore, logger)
+	sessionLocker := NewSessionLocker(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)
+	turnRWLock := NewTurnRWLock(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)
+	classifier := NewOperationClassifier(policy.OperationClasses)
+	guard := NewConcurrencyGuard(sessionLocker, turnRWLock, classifier)
 
 	forwarder := mcp.NewUpstreamForwarder(config.UpstreamMCPURL, config.UpstreamTimeout)
 	pipeline := mcp.NewPipeline(forwarder)
@@ -91,6 +98,7 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 
 	server := NewServer(config, pipeline, logger)
 	server.forwarder = forwarder
+	server.guard = guard
 	return server, cleanup, nil
 }
 

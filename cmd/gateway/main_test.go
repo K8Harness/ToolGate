@@ -241,6 +241,64 @@ rules:
 	}
 }
 
+func TestBuildGatewayServerWiresConcurrencyGuard(t *testing.T) {
+	ctx := context.Background()
+	dsn := testSchemaDSN(t, testPostgresDSN(t))
+
+	policyPath := writePolicyFile(t, `
+defaultAction: allow
+budgets:
+  maxToolCallsPerTurn: 3
+operationClasses:
+  refund: read
+rules:
+  - tool: refund
+    action: allow
+`)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":{"ok":true}}`))
+	}))
+	defer upstream.Close()
+
+	config := &Config{
+		ListenPort:         8080,
+		PolicyFilePath:     policyPath,
+		PostgresDSN:        dsn,
+		RedisDSN:           testRedisDSN(t),
+		UpstreamMCPURL:     upstream.URL,
+		TurnIDHeader:       defaultTurnIDHeader,
+		UpstreamTimeout:    time.Second,
+		SessionTTL:         time.Minute,
+		SessionLockTTL:     time.Minute,
+		LockAcquireTimeout: 250 * time.Millisecond,
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	server, cleanup, err := buildGatewayServer(ctx, config, logger)
+	if err != nil {
+		t.Fatalf("buildGatewayServer() error = %v, want nil", err)
+	}
+	t.Cleanup(cleanup)
+
+	if server.guard == nil {
+		t.Fatal("server.guard = nil, want ConcurrencyGuard")
+	}
+	if server.guard.locker == nil {
+		t.Fatal("server.guard.locker = nil, want SessionLocker")
+	}
+	if server.guard.rwlock == nil {
+		t.Fatal("server.guard.rwlock = nil, want TurnRWLock")
+	}
+	if server.guard.classifier == nil {
+		t.Fatal("server.guard.classifier = nil, want OperationClassifier")
+	}
+	if got := server.guard.classifier.Classify("refund"); got != OperationClassRead {
+		t.Fatalf("classifier.Classify(%q) = %v, want %v", "refund", got, OperationClassRead)
+	}
+}
+
 func interceptFatalf(t *testing.T, fn func()) (message string) {
 	t.Helper()
 

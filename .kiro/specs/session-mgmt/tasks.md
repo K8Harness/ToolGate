@@ -63,7 +63,7 @@
   - _Requirements: 1.1, 2.3, 5.1_
   - _Boundary: ConcurrencyGuard_
 
-- [ ] 3.2 Wire ConcurrencyGuard into the gateway server and startup sequence
+- [x] 3.2 Wire ConcurrencyGuard into the gateway server and startup sequence
   - Add `guard *ConcurrencyGuard` field to the `Server` struct in `cmd/gateway/server.go`
   - In `handleMCPPost`, extract the tool name from `req.Params` for `tools/call` requests; replace the direct `pipeline.Run()` call with `guard.Execute(ctx, sessionID, turnID, toolName, fn)` where `fn` wraps `pipeline.Run()`
   - In `cmd/gateway/main.go`, instantiate `NewRedisClient`, `NewSessionLocker`, `NewTurnRWLock`, `NewOperationClassifier(policy.OperationClasses)`, and `NewConcurrencyGuard`; pass the guard into `Server`; close the Redis client in the shutdown sequence
