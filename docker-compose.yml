@@ -15,6 +15,8 @@ services:
       POLICY_FILE: policy.yaml
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
       REDIS_DSN: redis://redis:6379/0
+      SESSION_LOCK_TTL: "3s"
+      LOCK_ACQUIRE_TIMEOUT: "5s"
       UPSTREAM_MCP_URL: http://fake-upstream:8081/mcp
     ports:
       - "18080:8080"

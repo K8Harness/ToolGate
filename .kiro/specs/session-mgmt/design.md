@@ -167,12 +167,14 @@ sequenceDiagram
     C->>S: POST /mcp tools/call (sessionID, turnID, toolName)
     S->>G: Execute(sessionID, turnID, toolName, fn)
     G->>SL: Acquire(ctx, sessionID, turnID)
-    SL->>R: Lua: GET lock; if absent or same turnID → SET/INCR refcount
+    SL->>R: Lua acquire session mutex
+    Note over R: GET lock<br/>If absent or same turnID: SET / INCR refcount
     alt Lock acquired
         R-->>SL: OK
         SL-->>G: nil
         G->>RW: ReadLock or WriteLock(ctx, turnID)
-        RW->>R: Lua: INCR readers (read) or poll readers==0 + SET NX wlock (write)
+        RW->>R: Lua acquire RW slot
+        Note over R: Read path: INCR readers<br/>Write path: poll readers eq 0, then SETNX wlock
         alt RW slot acquired
             R-->>RW: OK
             RW-->>G: nil
@@ -186,7 +188,7 @@ sequenceDiagram
             G->>SL: Release (cleanup)
             G-->>S: LockTimeoutError
         end
-    else Different turn holds lock; timeout exceeded
+    else Different turn holds lock and timeout exceeded
         SL-->>G: LockTimeoutError
         G-->>S: LockTimeoutError
     end
@@ -514,7 +516,7 @@ Structured `slog` entries:
 ### E2E Tests
 
 - **Docker Compose**: Gateway + Redis; demo agent issues a `tools/call`; verify `session:*:lock` key exists in Redis during processing and is deleted after response
-- **Restart safety**: Gateway restarted mid-turn (SIGKILL); verify next request for same session acquires lock immediately (no stuck key due to TTL expiry)
+- **Restart safety**: Gateway restarted mid-turn (SIGKILL); verify next request for a freshly initialized session acquires its lock immediately (no stuck Redis key remains from the pre-restart session). The old `Mcp-Session-Id` is intentionally invalid post-restart per Req 2.4 — this test proves Redis lock cleanup, not session durability.
 
 ## Performance & Scalability
 

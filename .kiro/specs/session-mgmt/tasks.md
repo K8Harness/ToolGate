@@ -102,7 +102,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
   - _Boundary: TurnRWLock_
 
-- [ ] 4.4 Integration tests for ConcurrencyGuard with concurrent goroutines
+- [x] 4.4 Integration tests for ConcurrencyGuard with concurrent goroutines
   - Test same session + same turn, two read-class Execute calls: use a channel barrier inside each `fn()` to verify both are in-flight simultaneously before either returns
   - Test same session + different turns: second Execute blocks until first `fn()` returns; if `acquireTimeout` elapses, second receives `LockTimeoutError`
   - Test different sessionIDs: two Execute calls proceed without any blocking; verify independent Redis key namespaces (no shared `session:<id>:lock` key)
@@ -111,10 +111,10 @@
   - _Depends: 3.1_
   - _Requirements: 1.1, 2.1, 5.1_
 
-- [ ] 4.5 End-to-end validation via Docker Compose with real Redis
+- [x] 4.5 End-to-end validation via Docker Compose with real Redis
   - Start the full Docker Compose stack (gateway + Redis + fake upstream + Postgres)
   - Send a `tools/call` request to the gateway; verify the response is correct and `redis-cli keys 'session:*'` shows the lock key during processing and is empty after the response
-  - Simulate a gateway restart mid-turn (SIGKILL the gateway container); restart the container; verify the next request for the same session succeeds within the `SessionLockTTL` window (no stuck lock, TTL expiry allows re-acquisition)
-  - Observable: `docker compose up` + request script produces a correct JSON-RPC response; post-restart request succeeds without a `LockTimeoutError`; `redis-cli keys 'session:*'` is empty after the session completes
+  - Simulate a gateway restart mid-turn (SIGKILL the gateway container); restart the container; initialize a fresh session and verify the first `tools/call` on it acquires its session lock immediately (no `LockTimeoutError`, no waiting on `SessionLockTTL`). Note: sessions are intentionally not preserved across restarts (Req 2.4); the old `Mcp-Session-Id` is expected to be invalid.
+  - Observable: `docker compose up` + request script produces a correct JSON-RPC response; post-restart `redis-cli keys 'session:*'` shows only the new session's keys; the first `tools/call` on the new session returns a normal JSON-RPC response without a `LockTimeoutError`; `redis-cli keys 'session:*'` is empty after the session completes
   - _Depends: 3.2_
   - _Requirements: 2.4_
