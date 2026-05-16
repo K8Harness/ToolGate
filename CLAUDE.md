@@ -49,9 +49,6 @@ Skills are located in `.claude/skills/kiro-*/SKILL.md`
 - `kiro-verify-completion` — fresh-evidence gate before success or completion claims
 - **If there is even a 1% chance a skill applies to the current task, invoke it.** Do not skip skills because the task seems simple.
 
-## Implementation Routing
-- When asked to run `/kiro-impl` for any feature, always delegate to Codex using the `codex-rescue` agent rather than running it yourself.
-
 ## Development Rules
 - 3-phase approval workflow: Requirements → Design → Tasks → Implementation
 - Human review required each phase; use `-y` only for intentional fast-track
