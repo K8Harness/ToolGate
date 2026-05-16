@@ -67,7 +67,7 @@
   - _Requirements: 3.1, 6.1, 6.2, 6.3_
 
 - [ ] 4. Validation — unit, integration, and E2E tests
-- [ ] 4.1 (P) Unit tests for the approval hold bridge
+- [x] 4.1 (P) Unit tests for the approval hold bridge
   - Test that a received `"approved"` signal causes `WaitForDecision` to return `ApprovalDecision{Approved: true}`
   - Test that a received `"denied"` signal causes `WaitForDecision` to return `ApprovalDecision{Approved: false}`
   - Test that timeout fires after the configured duration: ticket status is updated to `"expired"` and `ErrApprovalTimeout` is returned (use a short timeout config in tests)

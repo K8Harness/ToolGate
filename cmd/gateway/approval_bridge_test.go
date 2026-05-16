@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,7 +43,8 @@ func (f *fakeSessionLocker) Extend(_ context.Context, _, _ string) error {
 // fakeApprovalPubSub simulates a Redis Pub/Sub channel for tests.
 // It delivers messages from the messages channel, and nil when closed.
 type fakeApprovalPubSub struct {
-	ch chan approvalMessage
+	ch          chan approvalMessage
+	closeCalled int
 }
 
 func newFakeApprovalPubSub() *fakeApprovalPubSub {
@@ -55,6 +58,7 @@ func (f *fakeApprovalPubSub) Channel() <-chan approvalMessage {
 }
 
 func (f *fakeApprovalPubSub) Close() error {
+	f.closeCalled++
 	return nil
 }
 
@@ -68,6 +72,10 @@ func (f *fakeApprovalPubSub) sendDenied() {
 
 func (f *fakeApprovalPubSub) sendNil() {
 	f.ch <- approvalMessage{isNil: true}
+}
+
+func (f *fakeApprovalPubSub) closeChannel() {
+	close(f.ch)
 }
 
 // --- Test helpers ---
@@ -116,6 +124,9 @@ func TestApprovalBridgeApprovedSignalReturnsApprovedDecision(t *testing.T) {
 	if tickets.updateStatusCalled {
 		t.Fatal("UpdateStatus called on approved path, want no call")
 	}
+	if pubsub.closeCalled != 1 {
+		t.Fatalf("pubsub.Close call count = %d, want 1", pubsub.closeCalled)
+	}
 }
 
 func TestApprovalBridgeDeniedSignalReturnsDeniedDecision(t *testing.T) {
@@ -145,6 +156,9 @@ func TestApprovalBridgeDeniedSignalReturnsDeniedDecision(t *testing.T) {
 	// Denied path: ticket status update is the webhook handler's job, NOT the bridge's
 	if tickets.updateStatusCalled {
 		t.Fatal("UpdateStatus called on denied path, want no call (that is webhook handler's job)")
+	}
+	if pubsub.closeCalled != 1 {
+		t.Fatalf("pubsub.Close call count = %d, want 1", pubsub.closeCalled)
 	}
 }
 
@@ -177,6 +191,9 @@ func TestApprovalBridgeTimeoutUpdatesTicketAndReturnsErrApprovalTimeout(t *testi
 	if tickets.updateStatusBy != "" {
 		t.Fatalf("UpdateStatus decidedBy = %q, want empty string (system-triggered)", tickets.updateStatusBy)
 	}
+	if pubsub.closeCalled != 1 {
+		t.Fatalf("pubsub.Close call count = %d, want 1", pubsub.closeCalled)
+	}
 }
 
 func TestApprovalBridgeNilMessageFollowsTimeoutPath(t *testing.T) {
@@ -205,6 +222,38 @@ func TestApprovalBridgeNilMessageFollowsTimeoutPath(t *testing.T) {
 	if tickets.updateStatusStatus != "expired" {
 		t.Fatalf("UpdateStatus status = %q, want %q", tickets.updateStatusStatus, "expired")
 	}
+	if pubsub.closeCalled != 1 {
+		t.Fatalf("pubsub.Close call count = %d, want 1", pubsub.closeCalled)
+	}
+}
+
+func TestApprovalBridgeClosedChannelFollowsTimeoutPath(t *testing.T) {
+	t.Parallel()
+
+	tickets := &fakeTicketStore{}
+	locker := &fakeSessionLocker{}
+	pubsub := newFakeApprovalPubSub()
+	bridge := newTestApprovalBridge(tickets, locker, pubsub, 200*time.Millisecond)
+
+	ctx := context.Background()
+	ticketID := "ticket-closed-1"
+
+	pubsub.closeChannel()
+
+	_, err := bridge.WaitForDecision(ctx, ticketID, "session-closed", "turn-closed")
+
+	if !errors.Is(err, ErrApprovalTimeout) {
+		t.Fatalf("WaitForDecision() error = %v, want ErrApprovalTimeout (closed channel follows timeout path)", err)
+	}
+	if !tickets.updateStatusCalled {
+		t.Fatal("UpdateStatus not called after closed channel, want called with 'expired'")
+	}
+	if tickets.updateStatusStatus != "expired" {
+		t.Fatalf("UpdateStatus status = %q, want %q", tickets.updateStatusStatus, "expired")
+	}
+	if pubsub.closeCalled != 1 {
+		t.Fatalf("pubsub.Close call count = %d, want 1", pubsub.closeCalled)
+	}
 }
 
 func TestApprovalBridgeContextCancelReturnsCtxErr(t *testing.T) {
@@ -229,11 +278,15 @@ func TestApprovalBridgeContextCancelReturnsCtxErr(t *testing.T) {
 	if tickets.updateStatusCalled {
 		t.Fatal("UpdateStatus called on ctx.Done path, want no call")
 	}
+	if pubsub.closeCalled != 1 {
+		t.Fatalf("pubsub.Close call count = %d, want 1", pubsub.closeCalled)
+	}
 }
 
 func TestApprovalBridgeLockExtendErrorIsLoggedAndWaitContinues(t *testing.T) {
 	t.Parallel()
 
+	var logs bytes.Buffer
 	tickets := &fakeTicketStore{}
 	// Configure locker to return errors on Extend
 	locker := &fakeSessionLocker{extendErr: errors.New("redis extend failed")}
@@ -242,6 +295,7 @@ func TestApprovalBridgeLockExtendErrorIsLoggedAndWaitContinues(t *testing.T) {
 	bridge := newTestApprovalBridge(tickets, locker, pubsub, 5*time.Second)
 	// Make the lock extend interval very short to ensure it fires before our signal
 	bridge.lockExtendInterval = 10 * time.Millisecond
+	bridge.log = slog.New(slog.NewTextHandler(&logs, nil))
 
 	ctx := context.Background()
 	ticketID := "ticket-extend-err-1"
@@ -262,5 +316,14 @@ func TestApprovalBridgeLockExtendErrorIsLoggedAndWaitContinues(t *testing.T) {
 	}
 	if !locker.extendCalled {
 		t.Fatal("Extend never called, want at least one call")
+	}
+	if !strings.Contains(logs.String(), "session lock extend failed during approval wait") {
+		t.Fatalf("logs = %q, want lock extend failure entry", logs.String())
+	}
+	if !strings.Contains(logs.String(), ticketID) {
+		t.Fatalf("logs = %q, want ticketID %q", logs.String(), ticketID)
+	}
+	if pubsub.closeCalled != 1 {
+		t.Fatalf("pubsub.Close call count = %d, want 1", pubsub.closeCalled)
 	}
 }
