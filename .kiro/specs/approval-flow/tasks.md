@@ -106,7 +106,7 @@
 ## Implementation Notes
 - Schema bug fixed: ticket.status CHECK constraint had 'rejected' instead of 'denied' (the canonical value per design/requirements). Fixed in db.go with a DO-block repair migration for existing databases. All downstream tasks must use 'denied', not 'rejected'.
 
-- [ ] 4.5 End-to-end validation via Docker Compose with real Redis and Slack webhook simulation
+- [x] 4.5 End-to-end validation via Docker Compose with real Redis and Slack webhook simulation
   - Bring up the full Docker Compose stack including Postgres and Redis
   - Send an `approvalRequired` MCP tool call and verify the HTTP connection is held open
   - Simulate a Slack approve action by sending a correctly HMAC-signed `POST /slack/actions` request; verify the tool result is returned to the MCP client

@@ -1,8 +1,8 @@
 services:
   gateway:
-    image: golang:1.25
+    image: debian:bookworm-slim
     working_dir: /workspace
-    command: ["go", "run", "./cmd/gateway"]
+    command: ["/workspace/.compose-bin/gateway"]
     depends_on:
       fake-upstream:
         condition: service_started
@@ -15,6 +15,9 @@ services:
       POLICY_FILE: policy.yaml
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
       REDIS_DSN: redis://redis:6379/0
+      SLACK_BOT_TOKEN: "xoxb-demo-token"
+      SLACK_SIGNING_SECRET: "demo-signing-secret"
+      SLACK_CHANNEL: "C-DEMO-APPROVALS"
       SESSION_LOCK_TTL: "3s"
       LOCK_ACQUIRE_TIMEOUT: "5s"
       UPSTREAM_MCP_URL: http://fake-upstream:8081/mcp
