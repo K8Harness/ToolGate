@@ -135,7 +135,7 @@
   - _Boundary: PolicyGate extension, Rule struct_
 
 - [ ] 7. Docker Compose stack and default EvalSuite
-- [ ] 7.1 Create `deploy/docker-compose.yml` with all v0 services
+- [x] 7.1 Create `deploy/docker-compose.yml` with all v0 services
   - Include all services from the root `docker-compose.yml` (gateway, postgres, redis) with their existing healthchecks and env vars
   - Add new services: `fake-stripe` (build: `examples/fake-mcp-servers/stripe`, port 8082, healthcheck on POST /mcp), `fake-zendesk` (build: zendesk, port 8083), `fake-slack` (build: slack, port 8084), `mock-slack` (build: `examples/mock-slack`, port 8090, env: `GATEWAY_URL=http://gateway:8080`, `SLACK_SIGNING_SECRET`), `support-agent` (build: `examples/support-agent`, port 8085, env: `GATEWAY_URL=http://gateway:8080`)
   - Gateway service: add `SLACK_API_BASE_URL=http://mock-slack:8090/api` and appropriate `depends_on` with `condition: service_healthy` for all services it calls (postgres, redis, fake-stripe as the primary upstream)

@@ -1,0 +1,187 @@
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile_inline: |
+        FROM golang:1.25-alpine AS builder
+        WORKDIR /build
+        COPY go.mod go.sum ./
+        RUN go mod download
+        COPY . .
+        RUN CGO_ENABLED=0 GOOS=linux go build -o /gateway ./cmd/gateway
+
+        FROM alpine:latest
+        WORKDIR /app
+        COPY --from=builder /gateway /gateway
+        COPY policy.yaml /app/policy.yaml
+        ENTRYPOINT ["/gateway"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      fake-stripe:
+        condition: service_healthy
+    environment:
+      GATEWAY_PORT: "8080"
+      POLICY_FILE: /app/policy.yaml
+      POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
+      REDIS_DSN: redis://redis:6379/0
+      SLACK_BOT_TOKEN: "xoxb-demo-token"
+      SLACK_SIGNING_SECRET: "demo-signing-secret"
+      SLACK_CHANNEL: "C-DEMO-APPROVALS"
+      SLACK_API_BASE_URL: http://mock-slack:8090/api
+      SESSION_LOCK_TTL: "3s"
+      LOCK_ACQUIRE_TIMEOUT: "5s"
+      UPSTREAM_MCP_URL: http://fake-stripe:8082/mcp
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://127.0.0.1:8080/mcp",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    ports:
+      - "18080:8080"
+    networks:
+      - eval-gate
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    ports:
+      - "5432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - eval-gate
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "6379"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - eval-gate
+
+  fake-stripe:
+    build:
+      context: ..
+      dockerfile: examples/fake-mcp-servers/stripe/Dockerfile
+    expose:
+      - "8082"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null --header='Content-Type: application/json' --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0.0\"}}}' http://127.0.0.1:8082/mcp",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - eval-gate
+
+  fake-zendesk:
+    build:
+      context: ..
+      dockerfile: examples/fake-mcp-servers/zendesk/Dockerfile
+    expose:
+      - "8083"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null --header='Content-Type: application/json' --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0.0\"}}}' http://127.0.0.1:8083/mcp",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - eval-gate
+
+  fake-slack:
+    build:
+      context: ..
+      dockerfile: examples/fake-mcp-servers/slack/Dockerfile
+    expose:
+      - "8084"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8084/inspect"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - eval-gate
+
+  mock-slack:
+    build:
+      context: ..
+      dockerfile: examples/mock-slack/Dockerfile
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      GATEWAY_URL: http://gateway:8080
+      SLACK_SIGNING_SECRET: demo-signing-secret
+    expose:
+      - "8090"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null --header='Content-Type: application/json' --post-data='{}' http://127.0.0.1:8090/api/chat.postMessage",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - eval-gate
+
+  support-agent:
+    build: ../examples/support-agent
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      GATEWAY_URL: http://gateway:8080
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s = socket.create_connection(('127.0.0.1', 8085), 2); s.close()",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    ports:
+      - "8085:8085"
+    networks:
+      - eval-gate
+
+networks:
+  eval-gate:
+    driver: bridge
+    internal: true
