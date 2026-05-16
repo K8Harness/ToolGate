@@ -46,7 +46,7 @@
   - _Boundary: Reporter_
 
 - [ ] 3. Orchestrator and case runner
-- [ ] 3.1 Build the Docker Compose orchestrator
+- [x] 3.1 Build the Docker Compose orchestrator
   - Implement `Orchestrator` with `Up(ctx context.Context) error` and `Down(ctx context.Context) error` in `cmd/eval-runner/orchestrator.go`
   - At startup check: call `exec.LookPath("docker")` and return a descriptive error if not found (this check is also done in main.go; Orchestrator is the authoritative location)
   - `Up`: run `docker compose -f <ComposeFile> -p <ProjectName> up -d --wait` via `exec.CommandContext`; on non-zero exit, capture last 20 lines of combined stderr and include in the returned error
