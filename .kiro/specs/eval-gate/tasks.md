@@ -16,7 +16,7 @@
   - Observable: `go run ./cmd/eval-runner` with no args and required env vars set starts, passes config and Docker checks, and exits with a clear "no suite found" message; passing a non-existent file path exits with a file-not-found error
   - _Requirements: 3.1, 3.2, 3.3, 3.5_
 
-- [ ] 2. Core — loader, evaluator, and reporter
+- [x] 2. Core — loader, evaluator, and reporter
 - [x] 2.1 (P) Build the EvalSuite YAML loader
   - Implement `LoadSuite(path string) (*EvalSuite, error)` in `cmd/eval-runner/suite.go`; populate `EvalCase` values using types from `types.go`
   - Use the default `yaml.v3` decoder (do NOT call `KnownFields(true)`); silently accept unknown fields for forward-compatibility
@@ -36,7 +36,7 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
   - _Boundary: Evaluator_
 
-- [ ] 2.3 (P) Build the Markdown reporter
+- [x] 2.3 (P) Build the Markdown reporter
   - Implement `GenerateReport(results []CaseResult) string` and `ExitCode(results []CaseResult) int` in `cmd/eval-runner/reporter.go` using types from `types.go`
   - Report structure (in order): summary table with columns `Case | Status` for every case; pass-rate line (`N/M cases passed`); per-failed-case detail blocks (case name header + each `CheckFailure`: check | expected | observed); final verdict line
   - Final verdict must be the exact last line of the string: `"PASS"` when all pass, `"FAIL: N case(s) failed"` when any fail
