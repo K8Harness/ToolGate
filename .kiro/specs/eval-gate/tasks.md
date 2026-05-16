@@ -187,7 +187,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4_
   - _Boundary: EvalSuiteLoader_
 
-- [ ] 9.2 (P) Unit tests for the evaluator
+- [x] 9.2 (P) Unit tests for the evaluator
   - Test `mustInclude` subsequence match: exact match passes; match with intervening tool passes; out-of-order fails with `Check: "mustInclude"` and the tool name in `Expected`; empty trace fails with `Observed: "(empty trace)"`
   - Test `mustNotInclude`: absent tool passes; present tool fails with `Check: "mustNotInclude"` and the tool name in `Expected`
   - Test `policyOutcome`: correct match passes; wrong value fails with correct `Expected` and `Observed` values; empty trace fails with `Observed: "(empty trace)"`
