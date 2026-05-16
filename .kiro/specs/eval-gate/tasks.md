@@ -45,7 +45,7 @@
   - _Requirements: 6.1, 6.2, 6.3, 6.4_
   - _Boundary: Reporter_
 
-- [ ] 3. Orchestrator and case runner
+- [x] 3. Orchestrator and case runner
 - [x] 3.1 Build the Docker Compose orchestrator
   - Implement `Orchestrator` with `Up(ctx context.Context) error` and `Down(ctx context.Context) error` in `cmd/eval-runner/orchestrator.go`
   - At startup check: call `exec.LookPath("docker")` and return a descriptive error if not found (this check is also done in main.go; Orchestrator is the authoritative location)
@@ -56,7 +56,7 @@
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 3.5_
   - _Boundary: Orchestrator_
 
-- [ ] 3.2 Build the case runner (agent trigger and audit log trace capture)
+- [x] 3.2 Build the case runner (agent trigger and audit log trace capture)
   - Implement `CaseRunner` with `Run(ctx context.Context, c EvalCase) ([]TraceRow, error)` in `cmd/eval-runner/runner.go` using types from `types.go`
   - `Run`: POST `{"input": c.Input}` to `Config.AgentURL + "/trigger"` with a 60s HTTP timeout; parse `{"session_id": "<uuid>"}` from the response body
   - On non-200 HTTP status: return `(nil, error)` with the status code and first 256 bytes of response body
