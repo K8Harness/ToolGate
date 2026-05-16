@@ -1,10 +1,8 @@
 from mcp.client.streamable_http import streamable_http_client
 from mcp import ClientSession
 from flask import Flask, request, jsonify
-import uuid
 import os
 import asyncio
-import httpx
 
 app = Flask(__name__)
 GATEWAY_URL = os.environ["GATEWAY_URL"]
@@ -23,19 +21,19 @@ def trigger():
     if input_key not in DISPATCH:
         return jsonify({"error": "unknown input"}), 400
     tool, args = DISPATCH[input_key]
-    session_id = str(uuid.uuid4())
-    asyncio.run(_call_tool(session_id, tool, args))
+    session_id = asyncio.run(_call_tool(tool, args))
     return jsonify({"session_id": session_id})
 
 
-async def _call_tool(session_id: str, tool: str, args: dict) -> None:
-    async with streamable_http_client(
-        GATEWAY_URL,
-        http_client=httpx.AsyncClient(headers={"Mcp-Session-Id": session_id}),
-    ) as (read, write, _):
+async def _call_tool(tool: str, args: dict) -> str:
+    async with streamable_http_client(GATEWAY_URL) as (read, write, get_session_id):
         async with ClientSession(read, write) as session:
             await session.initialize()
+            session_id = get_session_id()
+            if not session_id:
+                raise RuntimeError("gateway did not provide an MCP session ID")
             await session.call_tool(tool, args)
+            return session_id
 
 
 if __name__ == "__main__":

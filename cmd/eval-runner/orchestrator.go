@@ -30,7 +30,7 @@ func (o *Orchestrator) Up(ctx context.Context) error {
 		return fmt.Errorf("docker not found in PATH: %w", err)
 	}
 
-	output, err := o.runCompose(ctx, "up", "-d", "--wait")
+	output, err := o.runCompose(ctx, "up", "-d", "--build", "--wait")
 	if err != nil {
 		return fmt.Errorf("docker compose up failed: %s", tailLines(output, 20))
 	}

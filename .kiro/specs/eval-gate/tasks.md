@@ -161,7 +161,7 @@
   - Observable: running `make demo` from the repository root with Docker available starts the compose stack, prints per-case status, prints the Markdown report, and exits 0 when all 4 cases pass; running without Docker prints a diagnostic and exits non-zero
   - _Requirements: 3.3, 7.5, 10.1_
   - _Boundary: Makefile_
-  - _Blocked: spec conflict — the demo agent/policy/EvalSuite use tool names `refund_small`, `refund_large`, `delete_record`, and `send_slack_message`, but the assembled gateway forwards to a single `UPSTREAM_MCP_URL` and the fake upstream servers expose incompatible tool contracts (`create_charge`, `get_customer`, `create_ticket`, `close_ticket`, `send_slack_message`). Human decision required on the runtime contract and task ordering before `make demo` can be made to pass._
+  - _Blocked: `make demo` wiring now uses a single fake upstream contract, but end-to-end validation still fails because `scripts/fake_upstream.py` is not yet fully MCP-compatible with the Python `mcp` client path used by `examples/support-agent/agent.py`. `initialize` and `tools/list` support were added, but a clean all-pass `make demo` run has not yet been re-established._
 
 - [ ] 8. Integration — wire eval-runner main loop end-to-end
 - [x] 8.1 Wire all eval-runner components into `main.go`

@@ -104,7 +104,7 @@ func TestHelperProcess(t *testing.T) {
 	got := strings.Join(args[idx:], " ")
 	switch mode {
 	case "up-ok":
-		want := "docker compose -f testdata/compose.yml -p eval-gate up -d --wait"
+		want := "docker compose -f testdata/compose.yml -p eval-gate up -d --build --wait"
 		if got != want {
 			fmt.Fprintf(os.Stderr, "got %q want %q\n", got, want)
 			os.Exit(2)
@@ -118,7 +118,7 @@ func TestHelperProcess(t *testing.T) {
 		}
 		os.Exit(0)
 	case "up-fail":
-		want := "docker compose -f testdata/compose.yml -p eval-gate up -d --wait"
+		want := "docker compose -f testdata/compose.yml -p eval-gate up -d --build --wait"
 		if got != want {
 			fmt.Fprintf(os.Stderr, "got %q want %q\n", got, want)
 			os.Exit(2)
