@@ -1,7 +1,9 @@
 {
-  "feature": "session-mgmt",
+  "feature_name": "eval-gate",
+  "created_at": "2026-05-16T00:00:00Z",
+  "updated_at": "2026-05-16T00:00:00Z",
   "language": "en",
-  "phase": "implemented",
+  "phase": "tasks-generated",
   "approvals": {
     "requirements": {
       "generated": true,
@@ -17,7 +19,5 @@
     }
   },
   "ready_for_implementation": true,
-  "implementation_complete": true,
-  "created_at": "2026-05-15",
-  "updated_at": "2026-05-16"
+  "implementation_complete": false
 }

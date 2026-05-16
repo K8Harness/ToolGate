@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Foundation — dependency, configuration, and shared constants
+- [x] 1. Foundation — dependency, configuration, and shared constants
 - [x] 1.1 Add go-redis/v9 dependency and extend gateway config with Redis fields
   - Run `go get github.com/redis/go-redis/v9@v9.19.0`; confirm entry appears in go.mod and go.sum
   - Add `RedisDSN string` (env `REDIS_DSN`), `SessionLockTTL time.Duration` (env `SESSION_LOCK_TTL`, default `60s`), and `LockAcquireTimeout time.Duration` (env `LOCK_ACQUIRE_TIMEOUT`, default `5s`) to the `Config` struct in `cmd/gateway/config.go`
@@ -22,7 +22,7 @@
   - _Requirements: 4.1_
   - _Note: task.md originally named `cmd/gateway/policy_gate.go` as the edit site; corrected to `core/policy/policy.go` to match code reality (design.md §Allowed Dependencies: "may extend but not restructure")_
 
-- [ ] 2. Core lock primitives and operation classifier
+- [x] 2. Core lock primitives and operation classifier
 - [x] 2.1 (P) Build the OperationClassifier
   - Implement `OperationClass` type (values: `OperationClassRead`, `OperationClassWrite`) and `OperationClassifier` struct in `cmd/gateway/classifier.go`
   - Implement `NewOperationClassifier(classes map[string]string) *OperationClassifier` and `Classify(toolName string) OperationClass`
@@ -52,7 +52,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
   - _Boundary: TurnRWLock_
 
-- [ ] 3. Integration — ConcurrencyGuard and server wiring
+- [x] 3. Integration — ConcurrencyGuard and server wiring
 - [x] 3.1 Build ConcurrencyGuard combining all lock primitives
   - Implement `ConcurrencyGuard` in `cmd/gateway/concurrency_guard.go` with `NewConcurrencyGuard(locker *SessionLocker, rwlock *TurnRWLock, classifier *OperationClassifier) *ConcurrencyGuard`
   - `Execute(ctx context.Context, sessionID, turnID, toolName string, fn func() (*mcp.JSONRPCResponse, error)) (*mcp.JSONRPCResponse, error)`: when `toolName` is empty (non-`tools/call` method), call `fn()` directly with no locking; otherwise classify toolName → acquire session mutex → acquire RWLock slot → call `fn()` → deferred release in reverse order (RWLock first, then session mutex)
@@ -72,7 +72,7 @@
   - _Depends: 3.1_
   - _Requirements: 2.3, 2.4, 4.1, 5.1_
 
-- [ ] 4. Validation — unit, integration, and end-to-end tests
+- [x] 4. Validation — unit, integration, and end-to-end tests
 - [x] 4.1 (P) Unit tests for OperationClassifier
   - Test `Classify()` with an explicit `"read"` map entry → `OperationClassRead`
   - Test `Classify()` with an explicit `"write"` map entry → `OperationClassWrite`
