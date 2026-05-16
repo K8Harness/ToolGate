@@ -67,6 +67,12 @@ class Handler(BaseHTTPRequestHandler):
         request_id = request.get("id")
         method = request.get("method")
 
+        if request_id is None:
+            # JSON-RPC notification — no response body
+            self.send_response(202)
+            self.end_headers()
+            return
+
         if method == "initialize":
             response = {
                 "jsonrpc": "2.0",

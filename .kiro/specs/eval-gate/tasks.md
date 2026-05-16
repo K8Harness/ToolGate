@@ -66,7 +66,7 @@
   - _Requirements: 4.1, 4.2, 4.3_
   - _Boundary: CaseRunner_
 
-- [ ] 4. Fake MCP servers
+- [x] 4. Fake MCP servers
 - [x] 4.1 (P) Build the fake Stripe MCP server
   - Create `examples/fake-mcp-servers/stripe/main.go` using the `go-sdk` server registration pattern
   - Register `create_charge(amount int, currency string, customer_id string)` returning `{"id":"ch_fake_001","status":"succeeded"}`
@@ -95,7 +95,7 @@
   - _Requirements: 8.1, 8.2, 8.3, 8.4_
   - _Boundary: Fake Slack Server_
 
-- [ ] 5. Mock Slack service and Python demo agent
+- [x] 5. Mock Slack service and Python demo agent
 - [x] 5.1 (P) Build the mock Slack auto-approver service
   - Create `examples/mock-slack/main.go` exposing `POST /api/chat.postMessage`
   - Parse the incoming Block Kit notification JSON: traverse `blocks` array to find the `actions` block; extract the first button element's `value` field as `ticket_id`
@@ -118,7 +118,7 @@
   - _Requirements: 9.1, 9.2, 9.3, 9.4_
   - _Boundary: Demo Agent_
 
-- [ ] 6. Gateway extensions — redact action and configurable Slack API base URL
+- [x] 6. Gateway extensions — redact action and configurable Slack API base URL
 - [x] 6.1 Add `SLACK_API_BASE_URL` config field to the gateway
   - Add optional `SlackAPIBaseURL string` to `Config` in `cmd/gateway/config.go`; load from `SLACK_API_BASE_URL` env var with default `"https://slack.com/api"`
   - Update `SlackNotifier` in `cmd/gateway/slack_notifier.go` to use `cfg.SlackAPIBaseURL` as the API base when constructing the `chat.postMessage` request URL, replacing the hardcoded string
@@ -134,7 +134,7 @@
   - _Requirements: 7.4_
   - _Boundary: PolicyGate extension, Rule struct_
 
-- [ ] 7. Docker Compose stack and default EvalSuite
+- [x] 7. Docker Compose stack and default EvalSuite
 - [x] 7.1 Create `deploy/docker-compose.yml` with all v0 services
   - Include all services from the root `docker-compose.yml` (gateway, postgres, redis) with their existing healthchecks and env vars
   - Add new services: `fake-stripe` (build: `examples/fake-mcp-servers/stripe`, port 8082, healthcheck on POST /mcp), `fake-zendesk` (build: zendesk, port 8083), `fake-slack` (build: slack, port 8084), `mock-slack` (build: `examples/mock-slack`, port 8090, env: `GATEWAY_URL=http://gateway:8080`, `SLACK_SIGNING_SECRET`), `support-agent` (build: `examples/support-agent`, port 8085, env: `GATEWAY_URL=http://gateway:8080`)
@@ -155,15 +155,14 @@
   - _Requirements: 7.1, 7.2, 7.3, 7.4_
   - _Boundary: EvalSuite YAML_
 
-- [ ] 7.3 Create `Makefile` with `make demo` target
+- [x] 7.3 Create `Makefile` with `make demo` target
   - Add `demo` Makefile target that sets `EVAL_COMPOSE_FILE=deploy/docker-compose.yml`, `POSTGRES_DSN=postgres://gateway:gateway@localhost:5432/gateway`, `AGENT_URL=http://localhost:8085` and runs `go run ./cmd/eval-runner evalsuite/default.yaml`
   - Build the `cmd/eval-runner` binary before running if it does not exist (or use `go run` directly)
   - Observable: running `make demo` from the repository root with Docker available starts the compose stack, prints per-case status, prints the Markdown report, and exits 0 when all 4 cases pass; running without Docker prints a diagnostic and exits non-zero
   - _Requirements: 3.3, 7.5, 10.1_
   - _Boundary: Makefile_
-  - _Blocked: `make demo` wiring now uses a single fake upstream contract, but end-to-end validation still fails because `scripts/fake_upstream.py` is not yet fully MCP-compatible with the Python `mcp` client path used by `examples/support-agent/agent.py`. `initialize` and `tools/list` support were added, but a clean all-pass `make demo` run has not yet been re-established._
 
-- [ ] 8. Integration — wire eval-runner main loop end-to-end
+- [x] 8. Integration — wire eval-runner main loop end-to-end
 - [x] 8.1 Wire all eval-runner components into `main.go`
   - In `main.go`: call `LoadConfig()` — exit non-zero on error; detect Docker via `exec.LookPath` — exit non-zero with diagnostic if missing
   - Load EvalSuite via `LoadSuite(suitePath)` — exit non-zero on parse error (before compose up)
@@ -176,7 +175,7 @@
   - _Depends: 2.1, 2.2, 2.3, 3.1, 3.2_
   - _Requirements: 1.3, 2.1, 2.3, 2.4, 3.1, 3.2, 3.3, 3.4, 3.5, 4.3, 6.1, 6.2, 6.3, 6.4_
 
-- [ ] 9. Validation — unit, integration, and E2E tests
+- [x] 9. Validation — unit, integration, and E2E tests
 - [x] 9.1 (P) Unit tests for EvalSuiteLoader
   - Test valid YAML with all fields (including `mustNotContainInArgs`) loads correctly into `EvalSuite.Cases`
   - Test YAML with an unknown top-level field (e.g., `futureField: true`) is accepted without error
@@ -217,7 +216,7 @@
   - _Requirements: 4.1, 4.2, 4.3_
   - _Boundary: CaseRunner_
 
-- [ ] 9.5 End-to-end validation via `make demo`
+- [x] 9.5 End-to-end validation via `make demo`
   - Run `make demo` against the full `deploy/docker-compose.yml` stack
   - Verify all 4 EvalSuite cases pass: `audit_log` contains a row with the expected `tool_name` and `decision` for each case's `session_id`
   - Verify PII redaction: the `audit_log` `arguments` for `send_slack_message` contains `"***REDACTED***"` and does not contain `"123-45-6789"`
@@ -226,3 +225,7 @@
   - Observable: `make demo` exits 0; printed report ends with `"PASS"`; all 4 case status lines show `[PASS]`
   - _Depends: 7.1, 7.3, 8.1_
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 10.1, 10.2, 10.3_
+
+## Implementation Notes
+- `scripts/fake_upstream.py` must return HTTP 202 + empty body for any JSON-RPC request lacking `id` (notifications, e.g. `notifications/initialized`); responding with `"id": null` is rejected by Python `mcp.client.streamable_http`.
+- `examples/support-agent/agent.py` must swallow exceptions from `session.call_tool`; the gateway's policy `deny` path raises in the MCP client, but the eval-runner only inspects the gateway's `audit_log`, so the trigger endpoint must still return `session_id`.

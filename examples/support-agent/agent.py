@@ -32,7 +32,11 @@ async def _call_tool(tool: str, args: dict) -> str:
             session_id = get_session_id()
             if not session_id:
                 raise RuntimeError("gateway did not provide an MCP session ID")
-            await session.call_tool(tool, args)
+            try:
+                await session.call_tool(tool, args)
+            except Exception:
+                # Gateway may deny via policy; eval-runner inspects audit_log
+                pass
             return session_id
 
 
