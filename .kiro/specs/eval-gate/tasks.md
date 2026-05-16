@@ -161,6 +161,7 @@
   - Observable: running `make demo` from the repository root with Docker available starts the compose stack, prints per-case status, prints the Markdown report, and exits 0 when all 4 cases pass; running without Docker prints a diagnostic and exits non-zero
   - _Requirements: 3.3, 7.5, 10.1_
   - _Boundary: Makefile_
+  - _Blocked: spec conflict — the demo agent/policy/EvalSuite use tool names `refund_small`, `refund_large`, `delete_record`, and `send_slack_message`, but the assembled gateway forwards to a single `UPSTREAM_MCP_URL` and the fake upstream servers expose incompatible tool contracts (`create_charge`, `get_customer`, `create_ticket`, `close_ticket`, `send_slack_message`). Human decision required on the runtime contract and task ordering before `make demo` can be made to pass._
 
 - [ ] 8. Integration — wire eval-runner main loop end-to-end
 - [ ] 8.1 Wire all eval-runner components into `main.go`
