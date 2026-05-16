@@ -151,7 +151,7 @@ func (c *SlackClient) SendApprovalRequest(ctx context.Context, ticketID string, 
 	if err != nil {
 		return fmt.Errorf("slack notifier: http request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("slack notifier: unexpected status %d", resp.StatusCode)
