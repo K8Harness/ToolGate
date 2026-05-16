@@ -161,14 +161,16 @@ func (h *PolicyGateHandler) Handle(ctx context.Context, req *mcp.JSONRPCRequest)
 	}
 
 	decision := h.evaluator.Evaluate(h.policy, toolName)
-	h.audit.Write(AuditRecord{
-		SessionID: sessionID,
-		TurnID:    turnID,
-		ToolName:  toolName,
-		Arguments: arguments,
-		Decision:  string(decision.Action),
-	})
-	h.logDecision(ctx, string(decision.Action), sessionID, turnID, toolName)
+	if decision.Action != corepolicy.ActionRedact {
+		h.audit.Write(AuditRecord{
+			SessionID: sessionID,
+			TurnID:    turnID,
+			ToolName:  toolName,
+			Arguments: arguments,
+			Decision:  string(decision.Action),
+		})
+		h.logDecision(ctx, string(decision.Action), sessionID, turnID, toolName)
+	}
 
 	switch decision.Action {
 	case corepolicy.ActionAllow:
@@ -218,6 +220,22 @@ func (h *PolicyGateHandler) Handle(ctx context.Context, req *mcp.JSONRPCRequest)
 		}
 		// Approved: return (nil, nil) — pipeline continues to UpstreamForwarder
 		return nil, nil
+	case corepolicy.ActionRedact:
+		redacted := redactArguments(arguments, decision.RedactFields)
+		h.audit.Write(AuditRecord{
+			SessionID: sessionID,
+			TurnID:    turnID,
+			ToolName:  toolName,
+			Arguments: redacted,
+			Decision:  "allow",
+		})
+		h.logDecision(ctx, "allow", sessionID, turnID, toolName)
+		newParams, err := json.Marshal(toolCallParams{Name: toolName, Arguments: redacted})
+		if err != nil {
+			return nil, fmt.Errorf("redact: re-marshal params: %w", err)
+		}
+		req.Params = newParams
+		return nil, nil
 	default:
 		return nil, &policyGateParamsError{err: fmt.Errorf("unsupported policy decision %q", decision.Action)}
 	}
@@ -245,6 +263,28 @@ func (h *PolicyGateHandler) logDecision(ctx context.Context, decision, sessionID
 		"sessionId", sessionID,
 		"turnId", turnID,
 	)
+}
+
+// redactArguments returns a copy of raw with each field in fields replaced by "***REDACTED***".
+// Fields not present in raw are silently skipped. If raw is not a JSON object, it is returned unchanged.
+func redactArguments(raw json.RawMessage, fields []string) json.RawMessage {
+	if len(fields) == 0 || raw == nil {
+		return raw
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return raw
+	}
+	for _, f := range fields {
+		if _, ok := m[f]; ok {
+			m[f] = "***REDACTED***"
+		}
+	}
+	redacted, err := json.Marshal(m)
+	if err != nil {
+		return raw
+	}
+	return redacted
 }
 
 func parseToolCallParams(raw json.RawMessage) (string, json.RawMessage, error) {

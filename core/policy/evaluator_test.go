@@ -3,6 +3,7 @@ package policy
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -180,7 +181,7 @@ defaultAction: deny
 			t.Fatalf("len(Rules) = %d, want %d", len(got.Rules), len(want.Rules))
 		}
 		for i := range want.Rules {
-			if got.Rules[i] != want.Rules[i] {
+			if !reflect.DeepEqual(got.Rules[i], want.Rules[i]) {
 				t.Fatalf("Rules[%d] = %#v, want %#v", i, got.Rules[i], want.Rules[i])
 			}
 		}
@@ -269,7 +270,7 @@ func TestEvaluateScenarios(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := Evaluate(policy, tt.toolName)
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("Evaluate(%q) = %#v, want %#v", tt.toolName, got, tt.want)
 			}
 		})
@@ -278,7 +279,7 @@ func TestEvaluateScenarios(t *testing.T) {
 	t.Run("empty rules list returns default action", func(t *testing.T) {
 		got := Evaluate(&AgentPolicy{DefaultAction: ActionAllow}, "tool_not_listed")
 		want := PolicyDecision{Action: ActionAllow}
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Evaluate(empty rules) = %#v, want %#v", got, want)
 		}
 	})
