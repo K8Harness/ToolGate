@@ -67,7 +67,7 @@
   - _Boundary: CaseRunner_
 
 - [ ] 4. Fake MCP servers
-- [ ] 4.1 (P) Build the fake Stripe MCP server
+- [x] 4.1 (P) Build the fake Stripe MCP server
   - Create `examples/fake-mcp-servers/stripe/main.go` using the `go-sdk` server registration pattern
   - Register `create_charge(amount int, currency string, customer_id string)` returning `{"id":"ch_fake_001","status":"succeeded"}`
   - Register `get_customer(customer_id string)` returning `{"id":<customer_id>,"name":"Test Customer"}`
