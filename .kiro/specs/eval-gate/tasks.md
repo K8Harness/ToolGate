@@ -86,7 +86,7 @@
   - _Requirements: 8.1, 8.2, 8.3, 8.4_
   - _Boundary: Fake Zendesk Server_
 
-- [ ] 4.3 (P) Build the fake Slack MCP server
+- [x] 4.3 (P) Build the fake Slack MCP server
   - Create `examples/fake-mcp-servers/slack/main.go` with go-sdk server pattern
   - Register `send_slack_message(channel string, message string)` returning `{"ok":true}`; append received arguments to an in-memory `[]map[string]any` protected by `sync.Mutex`
   - Serve MCP on port 8084; additionally expose `GET /inspect` on the same port via a path-muxed handler, returning `{"calls":[...]}` of stored arguments
