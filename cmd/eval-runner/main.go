@@ -1,0 +1,81 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"os/exec"
+)
+
+const defaultSuitePath = "evalsuite/default.yaml"
+
+type evalRunnerDeps struct {
+	args       []string
+	stdout     io.Writer
+	stderr     io.Writer
+	lookPath   func(file string) (string, error)
+	loadConfig func() (*Config, error)
+	loadSuite  func(path string) error
+}
+
+func main() {
+	os.Exit(run(evalRunnerDeps{
+		args:       os.Args[1:],
+		stdout:     os.Stdout,
+		stderr:     os.Stderr,
+		lookPath:   exec.LookPath,
+		loadConfig: LoadConfig,
+		loadSuite:  probeSuiteFile,
+	}))
+}
+
+func run(deps evalRunnerDeps) int {
+	if _, err := deps.lookPath("docker"); err != nil {
+		fmt.Fprintln(deps.stderr, "docker not found in PATH")
+		return 1
+	}
+
+	if _, err := deps.loadConfig(); err != nil {
+		fmt.Fprintln(deps.stderr, err.Error())
+		return 1
+	}
+
+	suitePath, err := resolveSuitePath(deps.args)
+	if err != nil {
+		fmt.Fprintln(deps.stderr, err.Error())
+		return 2
+	}
+
+	if err := deps.loadSuite(suitePath); err != nil {
+		fmt.Fprintln(deps.stderr, formatSuiteLoadError(suitePath, err))
+		return 1
+	}
+
+	fmt.Fprintf(deps.stdout, "Eval suite %q loaded; runner orchestration is deferred to task 8.1.\n", suitePath)
+	return 1
+}
+
+func resolveSuitePath(args []string) (string, error) {
+	switch len(args) {
+	case 0:
+		return defaultSuitePath, nil
+	case 1:
+		return args[0], nil
+	default:
+		return "", fmt.Errorf("expected at most one eval suite path argument")
+	}
+}
+
+func probeSuiteFile(path string) error {
+	_, err := os.ReadFile(path)
+	return err
+}
+
+func formatSuiteLoadError(path string, err error) string {
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Sprintf("failed to load eval suite %q: no such file or directory", path)
+	}
+	return fmt.Sprintf("failed to load eval suite %q: %v", path, err)
+}
