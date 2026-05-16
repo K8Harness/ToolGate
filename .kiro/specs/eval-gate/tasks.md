@@ -207,7 +207,7 @@
   - _Requirements: 6.1, 6.2, 6.3, 6.4_
   - _Boundary: Reporter_
 
-- [ ] 9.4 Integration test for CaseRunner trace capture
+- [x] 9.4 Integration test for CaseRunner trace capture
   - Spin up a real Postgres instance in `TestMain` using testcontainers-go or a `docker run postgres:16` helper; apply the existing `audit_log` schema
   - Pre-insert 3 `audit_log` rows for session_id `"test-session-1"` with distinct `tool_name`, `decision`, and `arguments` values and increasing `decided_at` timestamps
   - Run a minimal HTTP stub server that returns `{"session_id":"test-session-1"}` on `POST /trigger`
