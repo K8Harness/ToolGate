@@ -84,8 +84,11 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 	auditWriter := NewAuditWriter(pool, logger)
 	auditWriter.Start(ctx)
 	ticketStore := NewTicketStore(pool)
-	policyGate := NewPolicyGateHandler(policy, budgetTracker, auditWriter, ticketStore, logger)
 	sessionLocker := NewSessionLocker(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)
+	slackNotifier := NewSlackClient(config.SlackBotToken, config.SlackChannel, logger)
+	approvalBridge := NewRedisApprovalBridge(redisClient, ticketStore, sessionLocker, config.SessionLockTTL, logger)
+	slackWebhook := NewSlackWebhookHandler(config.SlackSigningSecret, ticketStore, redisClient, logger)
+	policyGate := NewPolicyGateHandler(policy, budgetTracker, auditWriter, ticketStore, approvalBridge, slackNotifier, logger)
 	turnRWLock := NewTurnRWLock(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)
 	classifier := NewOperationClassifier(policy.OperationClasses)
 	guard := NewConcurrencyGuard(sessionLocker, turnRWLock, classifier)
@@ -99,6 +102,7 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 	server := NewServer(config, pipeline, logger)
 	server.forwarder = forwarder
 	server.guard = guard
+	server.SetSlackWebhookHandler(slackWebhook)
 	return server, cleanup, nil
 }
 

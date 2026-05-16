@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -78,7 +79,7 @@ rules:
 	}
 }
 
-func TestPolicyGateIntegrationApprovalRequiredCreatesTicketAndPendingResponse(t *testing.T) {
+func TestPolicyGateIntegrationApprovalRequiredHoldsConnectionAndCreatesTicket(t *testing.T) {
 	pool, serverURL, toolCalls, cleanup := newPolicyGateIntegrationHarness(t, `
 defaultAction: deny
 budgets:
@@ -91,30 +92,33 @@ rules:
 
 	sessionID := initializeSession(t, serverURL)
 	before := time.Now().UTC()
-	rec := postJSON(t, serverURL+"/mcp", sessionID, "turn-approval", `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"refund_large","arguments":{"amount":9001}}}`)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("tools/call status = %d, want %d", rec.Code, http.StatusOK)
-	}
+	// The handler now blocks waiting for a human decision — send the request asynchronously.
+	// We verify the DB side-effects (ticket + audit) while the connection is held open.
+	go func() {
+		req, err := http.NewRequest(http.MethodPost, serverURL+"/mcp",
+			strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"refund_large","arguments":{"amount":9001}}}`))
+		if err != nil {
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(mcpSessionIDHeader, sessionID)
+		req.Header.Set(defaultTurnIDHeader, "turn-approval")
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
+	}()
 
-	var resp mcp.JSONRPCResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode response body: %v", err)
-	}
-	if resp.Error != nil {
-		t.Fatalf("response error = %+v, want nil", resp.Error)
-	}
-	result := decodePolicyGateResult(t, resp.Result)
-	if result["status"] != "pending" {
-		t.Fatalf("result.status = %v, want pending", result["status"])
-	}
-	if result["message"] != "tool call requires human approval" {
-		t.Fatalf("result.message = %v, want approval message", result["message"])
-	}
+	// Give the handler time to insert the ticket and begin the approval hold.
+	time.Sleep(100 * time.Millisecond)
+
+	// Upstream must NOT be called while the approval hold is active.
 	if got := toolCalls.Load(); got != 0 {
-		t.Fatalf("tool calls = %d, want 0", got)
+		t.Fatalf("tool calls = %d, want 0 (upstream must not be called during approval hold)", got)
 	}
 
+	// Ticket must be created with pending status while the connection is held open.
 	ticket := fetchTicketRecord(t, pool, sessionID, "turn-approval", "refund_large")
 	if ticket.Status != "pending" {
 		t.Fatalf("ticket status = %q, want %q", ticket.Status, "pending")
@@ -124,10 +128,13 @@ rules:
 		t.Fatalf("ticket expires_at = %s, want within 5s of %s", ticket.ExpiresAt, want)
 	}
 
+	// Audit record must be written before the decision is made.
 	record := fetchAuditRecord(t, pool, sessionID, "turn-approval", "refund_large")
 	if record.Decision != "approvalRequired" {
 		t.Fatalf("audit decision = %q, want %q", record.Decision, "approvalRequired")
 	}
+
+	// cleanup() (deferred) closes the test server, cancelling the pending request goroutine.
 }
 
 func TestPolicyGateIntegrationBudgetExhaustionWritesBudgetExceededAudit(t *testing.T) {
@@ -225,13 +232,19 @@ func newPolicyGateIntegrationHarness(t *testing.T, policyContents string) (*pgxp
 	}))
 
 	config := &Config{
-		ListenPort:      8080,
-		PolicyFilePath:  writePolicyFile(t, policyContents),
-		PostgresDSN:     dsn,
-		UpstreamMCPURL:  upstream.URL,
-		TurnIDHeader:    defaultTurnIDHeader,
-		UpstreamTimeout: time.Second,
-		SessionTTL:      time.Minute,
+		ListenPort:         8080,
+		PolicyFilePath:     writePolicyFile(t, policyContents),
+		PostgresDSN:        dsn,
+		RedisDSN:           testRedisDSN(t),
+		UpstreamMCPURL:     upstream.URL,
+		TurnIDHeader:       defaultTurnIDHeader,
+		UpstreamTimeout:    time.Second,
+		SessionTTL:         time.Minute,
+		SessionLockTTL:     defaultSessionLockTTL,
+		LockAcquireTimeout: defaultLockAcquireTimeout,
+		SlackBotToken:      "test-token",
+		SlackSigningSecret: "test-secret",
+		SlackChannel:       "#test",
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server, cleanupServer, err := buildGatewayServer(ctx, config, logger)
@@ -241,6 +254,7 @@ func newPolicyGateIntegrationHarness(t *testing.T, policyContents string) (*pgxp
 	ts := httptest.NewServer(server)
 
 	cleanup := func() {
+		ts.CloseClientConnections() // cancel in-flight approval holds before Close waits on them
 		ts.Close()
 		cleanupServer()
 		upstream.Close()

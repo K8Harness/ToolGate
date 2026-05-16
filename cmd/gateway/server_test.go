@@ -352,6 +352,22 @@ func TestServerPostToolsCallLogsErrorOutcome(t *testing.T) {
 	}
 }
 
+func TestServerHTTPServerUsesApprovalSafeWriteTimeout(t *testing.T) {
+	server := newTestServer(t, &captureHandler{})
+
+	httpServer := server.httpServer()
+
+	if httpServer == nil {
+		t.Fatal("httpServer() = nil, want configured server")
+	}
+	if httpServer.Handler != server {
+		t.Fatal("httpServer handler mismatch, want server")
+	}
+	if httpServer.WriteTimeout < 6*time.Minute {
+		t.Fatalf("WriteTimeout = %v, want at least %v", httpServer.WriteTimeout, 6*time.Minute)
+	}
+}
+
 type captureHandler struct {
 	callCount int
 	ctx       context.Context

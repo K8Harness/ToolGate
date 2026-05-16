@@ -20,18 +20,20 @@ const (
 )
 
 var (
-	keepaliveInterval = 30 * time.Second
-	keepaliveDeadline = 5 * time.Second
+	keepaliveInterval    = 30 * time.Second
+	keepaliveDeadline    = 5 * time.Second
+	approvalWriteTimeout = 6 * time.Minute
 )
 
 type Server struct {
-	config    *Config
-	pipeline  *mcp.Pipeline
-	forwarder mcp.Handler
-	guard     *ConcurrencyGuard
-	sessions  *SessionRegistry
-	mux       *http.ServeMux
-	log       *slog.Logger
+	config       *Config
+	pipeline     *mcp.Pipeline
+	forwarder    mcp.Handler
+	guard        *ConcurrencyGuard
+	slackWebhook http.Handler
+	sessions     *SessionRegistry
+	mux          *http.ServeMux
+	log          *slog.Logger
 }
 
 func NewServer(config *Config, pipeline *mcp.Pipeline, log *slog.Logger) *Server {
@@ -52,6 +54,13 @@ func NewServer(config *Config, pipeline *mcp.Pipeline, log *slog.Logger) *Server
 	return server
 }
 
+func (s *Server) SetSlackWebhookHandler(handler http.Handler) {
+	s.slackWebhook = handler
+	if handler != nil {
+		s.mux.Handle("POST /slack/actions", handler)
+	}
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if recover() != nil {
@@ -62,8 +71,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ListenAndServe() error {
+	return s.httpServer().ListenAndServe()
+}
+
+func (s *Server) httpServer() *http.Server {
 	addr := fmt.Sprintf(":%d", s.config.ListenPort)
-	return http.ListenAndServe(addr, s)
+	return &http.Server{
+		Addr:         addr,
+		Handler:      s,
+		WriteTimeout: approvalWriteTimeout,
+	}
 }
 
 func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {

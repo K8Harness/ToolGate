@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -303,14 +304,35 @@ func TestGatewayIntegrationToolsCallCreatesAndReleasesSessionLock(t *testing.T) 
 	turnID := "turn-lock-check"
 
 	releaseUpstream := make(chan struct{})
+	var releaseOnce sync.Once
+	closeRelease := func() { releaseOnce.Do(func() { close(releaseUpstream) }) }
+
 	upstreamStarted := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req mcp.JSONRPCRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if req.Method == "initialize" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"server":"ok"}}`))
+			return
+		}
 		close(upstreamStarted)
-		<-releaseUpstream
+		select {
+		case <-releaseUpstream:
+		case <-r.Context().Done():
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":{"ok":true}}`))
 	}))
-	defer upstream.Close()
+	defer func() {
+		closeRelease()
+		upstream.CloseClientConnections()
+		upstream.Close()
+	}()
 
 	policyPath := writePolicyFile(t, `
 defaultAction: allow
@@ -352,7 +374,10 @@ rules:
 	})
 
 	ts := httptest.NewServer(server)
-	defer ts.Close()
+	defer func() {
+		ts.CloseClientConnections()
+		ts.Close()
+	}()
 
 	sessionID := initializeSession(t, ts.URL)
 	done := make(chan *httptest.ResponseRecorder, 1)
@@ -368,7 +393,7 @@ rules:
 
 	assertRedisStringValue(t, redisClient, sessionLockKey(sessionID), turnID)
 
-	close(releaseUpstream)
+	closeRelease()
 
 	rec := <-done
 	if rec.Code != http.StatusOK {

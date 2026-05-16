@@ -53,6 +53,9 @@ func TestRunGatewayFatalfsWhenPolicyLoadFails(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://localhost:5432/toolgate?sslmode=disable")
 	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "test-signing-secret")
+	t.Setenv("SLACK_CHANNEL", "#approvals")
 	t.Setenv("POLICY_FILE", filepath.Join(t.TempDir(), "missing-policy.yaml"))
 
 	message := interceptFatalf(t, func() {
@@ -71,6 +74,9 @@ func TestRunGatewayFatalfsWhenPolicyYAMLIsInvalid(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://localhost:5432/toolgate?sslmode=disable")
 	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "test-signing-secret")
+	t.Setenv("SLACK_CHANNEL", "#approvals")
 	t.Setenv("POLICY_FILE", writePolicyFile(t, "rules: ["))
 
 	message := interceptFatalf(t, func() {
@@ -89,6 +95,9 @@ func TestRunGatewayFatalfsWhenPostgresInitFails(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://127.0.0.1:1/toolgate?sslmode=disable&connect_timeout=1")
 	t.Setenv("REDIS_DSN", testRedisDSN(t))
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "test-signing-secret")
+	t.Setenv("SLACK_CHANNEL", "#approvals")
 	t.Setenv("POLICY_FILE", writePolicyFile(t, `
 defaultAction: deny
 budgets:
@@ -198,12 +207,17 @@ rules:
 	config := &Config{
 		ListenPort:      8080,
 		PolicyFilePath:  policyPath,
-		PostgresDSN:     dsn,
-		RedisDSN:        testRedisDSN(t),
-		UpstreamMCPURL:  upstream.URL,
-		TurnIDHeader:    defaultTurnIDHeader,
-		UpstreamTimeout: time.Second,
-		SessionTTL:      time.Minute,
+		PostgresDSN:        dsn,
+		RedisDSN:           testRedisDSN(t),
+		UpstreamMCPURL:     upstream.URL,
+		TurnIDHeader:       defaultTurnIDHeader,
+		UpstreamTimeout:    time.Second,
+		SessionTTL:         time.Minute,
+		SessionLockTTL:     defaultSessionLockTTL,
+		LockAcquireTimeout: defaultLockAcquireTimeout,
+		SlackBotToken:      "test-token",
+		SlackSigningSecret: "test-secret",
+		SlackChannel:       "#test",
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -215,7 +229,10 @@ rules:
 
 	sessionID := server.sessions.Create().ID
 	ts := httptest.NewServer(server)
-	defer ts.Close()
+	defer func() {
+		ts.CloseClientConnections()
+		ts.Close()
+	}()
 
 	rec := postJSON(t, ts.URL+"/mcp", sessionID, "turn-1", `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"delete_record","arguments":{"id":"abc"}}}`)
 
@@ -238,6 +255,60 @@ rules:
 	}
 	if upstreamCalls != 0 {
 		t.Fatalf("upstream calls = %d, want 0", upstreamCalls)
+	}
+}
+
+func TestBuildGatewayServerRegistersSlackWebhookRoute(t *testing.T) {
+	ctx := context.Background()
+	dsn := testSchemaDSN(t, testPostgresDSN(t))
+
+	policyPath := writePolicyFile(t, `
+defaultAction: allow
+budgets:
+  maxToolCallsPerTurn: 3
+`)
+
+	config := &Config{
+		ListenPort:         8080,
+		PolicyFilePath:     policyPath,
+		PostgresDSN:        dsn,
+		RedisDSN:           testRedisDSN(t),
+		UpstreamMCPURL:     "http://example.invalid",
+		TurnIDHeader:       defaultTurnIDHeader,
+		UpstreamTimeout:    time.Second,
+		SessionTTL:         time.Minute,
+		SessionLockTTL:     time.Minute,
+		LockAcquireTimeout: 250 * time.Millisecond,
+		SlackBotToken:      "xoxb-test-token",
+		SlackSigningSecret: "test-signing-secret",
+		SlackChannel:       "#approvals",
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	server, cleanup, err := buildGatewayServer(ctx, config, logger)
+	if err != nil {
+		t.Fatalf("buildGatewayServer() error = %v, want nil", err)
+	}
+	t.Cleanup(cleanup)
+
+	ts := httptest.NewServer(server)
+	defer ts.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/slack/actions", strings.NewReader("payload=%7B%7D"))
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /slack/actions status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+
+	resp, err := http.Post(ts.URL+"/slack/actions", "application/x-www-form-urlencoded", strings.NewReader("payload=%7B%7D"))
+	if err != nil {
+		t.Fatalf("POST /slack/actions via httptest server: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("network POST /slack/actions status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 }
 

@@ -30,7 +30,7 @@ var schemaStatements = []string{
 		tool_name   TEXT        NOT NULL,
 		arguments   JSONB       NOT NULL,
 		status      TEXT        NOT NULL DEFAULT 'pending'
-		            CHECK (status IN ('pending', 'approved', 'rejected', 'expired', 'cancelled')),
+		            CONSTRAINT ticket_status_check CHECK (status IN ('pending', 'approved', 'denied', 'expired', 'cancelled')),
 		decision_by TEXT,
 		decided_at  TIMESTAMPTZ,
 		expires_at  TIMESTAMPTZ NOT NULL,
@@ -38,6 +38,23 @@ var schemaStatements = []string{
 		created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
 	`CREATE INDEX IF NOT EXISTS ticket_status_expires ON ticket (status, expires_at)`,
+	// Repair: replace legacy 'rejected' check constraint with 'denied' (approval-flow canonical value).
+	// Idempotent: no-op when ticket_status_check already has the correct definition.
+	`DO $$
+DECLARE
+	cname TEXT;
+BEGIN
+	SELECT conname INTO cname
+	FROM pg_constraint
+	WHERE conrelid = 'ticket'::regclass
+	  AND contype = 'c'
+	  AND pg_get_constraintdef(oid) LIKE '%rejected%';
+	IF cname IS NOT NULL THEN
+		EXECUTE format('ALTER TABLE ticket DROP CONSTRAINT %I', cname);
+		ALTER TABLE ticket ADD CONSTRAINT ticket_status_check
+			CHECK (status IN ('pending', 'approved', 'denied', 'expired', 'cancelled'));
+	END IF;
+END $$`,
 }
 
 func NewDBPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {

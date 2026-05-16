@@ -7,11 +7,12 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	corepolicy "github.com/K8Harness/ToolGate/core/policy"
 	"github.com/K8Harness/ToolGate/core/mcp"
+	corepolicy "github.com/K8Harness/ToolGate/core/policy"
 )
 
 func TestPolicyGateHandlerPassthroughSkipsAuditAndBudget(t *testing.T) {
@@ -24,6 +25,8 @@ func TestPolicyGateHandlerPassthroughSkipsAuditAndBudget(t *testing.T) {
 		audit,
 		tickets,
 		evaluator,
+		nil,
+		nil,
 		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		nowStub(time.Unix(0, 0)),
 	)
@@ -60,6 +63,8 @@ func TestPolicyGateHandlerAllowWritesAuditAndPassesThrough(t *testing.T) {
 		audit,
 		&policyGateTicketStub{},
 		evaluator,
+		nil,
+		nil,
 		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		nowStub(time.Unix(0, 0)),
 	)
@@ -102,6 +107,8 @@ func TestPolicyGateHandlerDenyReturnsPolicyErrorAndNoTicket(t *testing.T) {
 		audit,
 		tickets,
 		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionDeny}},
+		nil,
+		nil,
 		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		nowStub(time.Unix(0, 0)),
 	)
@@ -130,16 +137,20 @@ func TestPolicyGateHandlerDenyReturnsPolicyErrorAndNoTicket(t *testing.T) {
 	}
 }
 
-func TestPolicyGateHandlerApprovalRequiredReturnsPendingAndInsertsTicket(t *testing.T) {
+func TestPolicyGateHandlerApprovalRequiredInsertsTicketAndCallsBridge(t *testing.T) {
 	frozenNow := time.Date(2026, time.May, 14, 12, 0, 0, 0, time.UTC)
 	audit := &policyGateAuditStub{}
 	tickets := &policyGateTicketStub{}
+	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: true, TicketID: "ticket-1"}}
+	notifier := newMockSlackNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
 		NewBudgetTracker(),
 		audit,
 		tickets,
 		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionApprovalRequired}},
+		bridge,
+		notifier,
 		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		nowStub(frozenNow),
 	)
@@ -148,16 +159,9 @@ func TestPolicyGateHandlerApprovalRequiredReturnsPendingAndInsertsTicket(t *test
 	if err != nil {
 		t.Fatalf("Handle() error = %v, want nil", err)
 	}
-	if resp == nil {
-		t.Fatal("Handle() response = nil, want pending response")
-	}
-
-	gotResult := decodePolicyGateResult(t, resp.Result)
-	if gotResult["status"] != "pending" {
-		t.Fatalf("result.status = %v, want pending", gotResult["status"])
-	}
-	if gotResult["message"] != "tool call requires human approval" {
-		t.Fatalf("result.message = %v, want tool call requires human approval", gotResult["message"])
+	// Approved => pipeline continues => (nil, nil)
+	if resp != nil {
+		t.Fatalf("Handle() response = %#v, want nil (approved => continue)", resp)
 	}
 	if tickets.calls != 1 {
 		t.Fatalf("ticket inserts = %d, want 1", tickets.calls)
@@ -178,16 +182,23 @@ func TestPolicyGateHandlerApprovalRequiredReturnsPendingAndInsertsTicket(t *test
 	if audit.records[0].Decision != string(corepolicy.ActionApprovalRequired) {
 		t.Fatalf("audit decision = %q, want %q", audit.records[0].Decision, corepolicy.ActionApprovalRequired)
 	}
+	if !bridge.called {
+		t.Fatal("bridge.WaitForDecision was not called")
+	}
 }
 
-func TestPolicyGateHandlerApprovalRequiredLogsTicketInsertFailureAndReturnsPending(t *testing.T) {
+func TestPolicyGateHandlerApprovalRequiredLogsTicketInsertFailureAndContinuesHold(t *testing.T) {
 	var buf bytes.Buffer
+	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: true, TicketID: ""}}
+	notifier := newMockSlackNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
 		NewBudgetTracker(),
 		&policyGateAuditStub{},
 		&policyGateTicketStub{err: errors.New("insert failed")},
 		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionApprovalRequired}},
+		bridge,
+		notifier,
 		slog.New(slog.NewJSONHandler(&buf, nil)),
 		nowStub(time.Unix(0, 0)),
 	)
@@ -196,20 +207,35 @@ func TestPolicyGateHandlerApprovalRequiredLogsTicketInsertFailureAndReturnsPendi
 	if err != nil {
 		t.Fatalf("Handle() error = %v, want nil", err)
 	}
-	if resp == nil {
-		t.Fatal("Handle() response = nil, want pending response")
+	// Fail open: ticket insert failure does not abort; bridge is still called and approved => nil resp
+	if resp != nil {
+		t.Fatalf("Handle() response = %#v, want nil (approved after insert failure)", resp)
+	}
+	if !bridge.called {
+		t.Fatal("bridge.WaitForDecision was not called after ticket insert failure")
 	}
 
+	// Log output: 2 lines — decision log + warn log
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("captured %d log lines, want 2: %q", len(lines), buf.String())
+	if len(lines) < 2 {
+		t.Fatalf("captured %d log lines, want >= 2: %q", len(lines), buf.String())
 	}
-	entry := decodeLogEntry(t, lines[1])
-	assertLogString(t, entry, "level", "WARN")
-	assertLogString(t, entry, "msg", "ticket insert failed")
-	assertLogString(t, entry, "sessionId", "session-warn")
-	assertLogString(t, entry, "turnId", "turn-warn")
-	assertLogString(t, entry, "toolName", "refund")
+	// Find the warn line
+	var warnEntry map[string]any
+	for _, line := range lines {
+		e := decodeLogEntry(t, line)
+		if e["level"] == "WARN" {
+			warnEntry = e
+			break
+		}
+	}
+	if warnEntry == nil {
+		t.Fatalf("no WARN log line found in: %q", buf.String())
+	}
+	assertLogString(t, warnEntry, "msg", "ticket insert failed")
+	assertLogString(t, warnEntry, "sessionId", "session-warn")
+	assertLogString(t, warnEntry, "turnId", "turn-warn")
+	assertLogString(t, warnEntry, "toolName", "refund")
 }
 
 func TestPolicyGateHandlerBudgetExceededWritesAuditAndSkipsEvaluator(t *testing.T) {
@@ -221,6 +247,8 @@ func TestPolicyGateHandlerBudgetExceededWritesAuditAndSkipsEvaluator(t *testing.
 		audit,
 		&policyGateTicketStub{},
 		evaluator,
+		nil,
+		nil,
 		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		nowStub(time.Unix(0, 0)),
 	)
@@ -271,6 +299,8 @@ func TestPolicyGateHandlerMalformedParamsReturnsInternalError(t *testing.T) {
 		&policyGateAuditStub{},
 		&policyGateTicketStub{},
 		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionAllow}},
+		nil,
+		nil,
 		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		nowStub(time.Unix(0, 0)),
 	)
@@ -358,13 +388,18 @@ func nowStub(now time.Time) func() time.Time {
 	}
 }
 
-func TestPolicyGateHandlerApprovalRequiredPendingResponseShape(t *testing.T) {
+func TestPolicyGateHandlerApprovalRequiredErrorResponseShape(t *testing.T) {
+	// Verify the error response shape matches the spec: code -32001, message "approval denied"
+	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: false}}
+	notifier := newMockSlackNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 1}},
 		NewBudgetTracker(),
 		&policyGateAuditStub{},
 		&policyGateTicketStub{},
 		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionApprovalRequired}},
+		bridge,
+		notifier,
 		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		nowStub(time.Unix(0, 0)),
 	)
@@ -373,14 +408,16 @@ func TestPolicyGateHandlerApprovalRequiredPendingResponseShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle() error = %v, want nil", err)
 	}
+	if resp == nil || resp.Error == nil {
+		t.Fatalf("Handle() response = %#v, want error response", resp)
+	}
 
 	payload, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatalf("json.Marshal(response) error = %v, want nil", err)
 	}
-	if string(payload) != `{"jsonrpc":"2.0","id":1,"result":{"message":"tool call requires human approval","status":"pending"}}` &&
-		string(payload) != `{"jsonrpc":"2.0","id":1,"result":{"status":"pending","message":"tool call requires human approval"}}` {
-		t.Fatalf("response JSON = %s, want documented pending response shape", payload)
+	if string(payload) != `{"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":"approval denied"}}` {
+		t.Fatalf("response JSON = %s, want documented approval denied shape", payload)
 	}
 }
 
@@ -392,6 +429,8 @@ func TestPolicyGateHandlerLogsEachDecisionAtInfo(t *testing.T) {
 		&policyGateAuditStub{},
 		&policyGateTicketStub{},
 		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionDeny}},
+		nil,
+		nil,
 		slog.New(slog.NewJSONHandler(&buf, nil)),
 		nowStub(time.Unix(0, 0)),
 	)
@@ -413,5 +452,216 @@ func TestPolicyGateHandlerLogsEachDecisionAtInfo(t *testing.T) {
 	}
 	if !strings.Contains(line, `"turnId":"turn-log"`) {
 		t.Fatalf("log line = %s, want turnId field", line)
+	}
+}
+
+// --- Approval hold path tests (bridge + notifier injected) ---
+
+// mockApprovalBridge is a test double for ApprovalBridge.
+type mockApprovalBridge struct {
+	decision ApprovalDecision
+	err      error
+	called   bool
+}
+
+func (m *mockApprovalBridge) WaitForDecision(_ context.Context, _, _, _ string) (ApprovalDecision, error) {
+	m.called = true
+	return m.decision, m.err
+}
+
+// mockSlackNotifier is a test double for SlackNotifier.
+type mockSlackNotifier struct {
+	err        error
+	sendCalled chan struct{}
+}
+
+func newMockSlackNotifier(err error) *mockSlackNotifier {
+	return &mockSlackNotifier{
+		err:        err,
+		sendCalled: make(chan struct{}, 1),
+	}
+}
+
+func (m *mockSlackNotifier) SendApprovalRequest(_ context.Context, _ string, _ TicketRecord) error {
+	m.sendCalled <- struct{}{}
+	return m.err
+}
+
+type policyGateLockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *policyGateLockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *policyGateLockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func TestPolicyGateHandlerApprovalHoldApprovedReturnsContinue(t *testing.T) {
+	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: true, TicketID: "ticket-1"}}
+	notifier := newMockSlackNotifier(nil)
+	handler := newPolicyGateHandler(
+		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
+		NewBudgetTracker(),
+		&policyGateAuditStub{},
+		&policyGateTicketStub{},
+		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionApprovalRequired}},
+		bridge,
+		notifier,
+		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		nowStub(time.Unix(0, 0)),
+	)
+
+	resp, err := handler.Handle(contextWithSessionAndTurn("session-approved", "turn-approved"), testPolicyGateToolsCallRequest())
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if resp != nil {
+		t.Fatalf("Handle() response = %#v, want nil (approved => pipeline continues)", resp)
+	}
+	if !bridge.called {
+		t.Fatal("bridge.WaitForDecision was not called")
+	}
+}
+
+func TestPolicyGateHandlerApprovalHoldDeniedReturnsError(t *testing.T) {
+	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: false, TicketID: "ticket-1"}}
+	notifier := newMockSlackNotifier(nil)
+	handler := newPolicyGateHandler(
+		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
+		NewBudgetTracker(),
+		&policyGateAuditStub{},
+		&policyGateTicketStub{},
+		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionApprovalRequired}},
+		bridge,
+		notifier,
+		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		nowStub(time.Unix(0, 0)),
+	)
+
+	resp, err := handler.Handle(contextWithSessionAndTurn("session-denied", "turn-denied"), testPolicyGateToolsCallRequest())
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if resp == nil || resp.Error == nil {
+		t.Fatalf("Handle() response = %#v, want error response", resp)
+	}
+	if resp.Error.Code != -32001 {
+		t.Fatalf("error code = %d, want -32001", resp.Error.Code)
+	}
+	if resp.Error.Message != "approval denied" {
+		t.Fatalf("error message = %q, want %q", resp.Error.Message, "approval denied")
+	}
+}
+
+func TestPolicyGateHandlerApprovalHoldBridgeErrorReturnsDenied(t *testing.T) {
+	bridge := &mockApprovalBridge{err: errors.New("bridge internal error")}
+	notifier := newMockSlackNotifier(nil)
+	handler := newPolicyGateHandler(
+		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
+		NewBudgetTracker(),
+		&policyGateAuditStub{},
+		&policyGateTicketStub{},
+		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionApprovalRequired}},
+		bridge,
+		notifier,
+		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		nowStub(time.Unix(0, 0)),
+	)
+
+	resp, err := handler.Handle(contextWithSessionAndTurn("session-bridgeerr", "turn-bridgeerr"), testPolicyGateToolsCallRequest())
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if resp == nil || resp.Error == nil {
+		t.Fatalf("Handle() response = %#v, want error response", resp)
+	}
+	if resp.Error.Code != -32001 {
+		t.Fatalf("error code = %d, want -32001", resp.Error.Code)
+	}
+	if resp.Error.Message != "approval denied" {
+		t.Fatalf("error message = %q, want %q", resp.Error.Message, "approval denied")
+	}
+}
+
+func TestPolicyGateHandlerApprovalHoldTimeoutReturnsTimeoutError(t *testing.T) {
+	bridge := &mockApprovalBridge{err: ErrApprovalTimeout}
+	notifier := newMockSlackNotifier(nil)
+	handler := newPolicyGateHandler(
+		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
+		NewBudgetTracker(),
+		&policyGateAuditStub{},
+		&policyGateTicketStub{},
+		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionApprovalRequired}},
+		bridge,
+		notifier,
+		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		nowStub(time.Unix(0, 0)),
+	)
+
+	resp, err := handler.Handle(contextWithSessionAndTurn("session-timeout", "turn-timeout"), testPolicyGateToolsCallRequest())
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if resp == nil || resp.Error == nil {
+		t.Fatalf("Handle() response = %#v, want error response", resp)
+	}
+	if resp.Error.Code != -32001 {
+		t.Fatalf("error code = %d, want -32001", resp.Error.Code)
+	}
+	if resp.Error.Message != "approval timeout" {
+		t.Fatalf("error message = %q, want %q", resp.Error.Message, "approval timeout")
+	}
+}
+
+func TestPolicyGateHandlerApprovalHoldNotifierErrorDoesNotBlockBridge(t *testing.T) {
+	// Even if notifier returns an error, WaitForDecision must still be called.
+	var buf policyGateLockedBuffer
+	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: true, TicketID: "ticket-notifier-err"}}
+	notifier := newMockSlackNotifier(errors.New("slack down"))
+	handler := newPolicyGateHandler(
+		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
+		NewBudgetTracker(),
+		&policyGateAuditStub{},
+		&policyGateTicketStub{},
+		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionApprovalRequired}},
+		bridge,
+		notifier,
+		slog.New(slog.NewTextHandler(&buf, nil)),
+		nowStub(time.Unix(0, 0)),
+	)
+
+	resp, err := handler.Handle(contextWithSessionAndTurn("session-notifiererr", "turn-notifiererr"), testPolicyGateToolsCallRequest())
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if resp != nil {
+		t.Fatalf("Handle() response = %#v, want nil (approved => pipeline continues)", resp)
+	}
+	if !bridge.called {
+		t.Fatal("bridge.WaitForDecision was not called even though notifier failed")
+	}
+	// Wait for the notifier goroutine to complete before checking
+	select {
+	case <-notifier.sendCalled:
+	case <-time.After(time.Second):
+		t.Fatal("notifier.SendApprovalRequest was not called within 1 second")
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		if strings.Contains(buf.String(), "slack notification failed") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("logs = %q, want slack notification failure entry", buf.String())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
