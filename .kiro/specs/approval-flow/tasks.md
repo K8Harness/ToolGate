@@ -96,7 +96,7 @@
   - _Requirements: 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 5.1_
   - _Boundary: SlackClient, PolicyGateHandler_
 
-- [ ] 4.4 Integration tests for the full approval flow with real Redis and Postgres
+- [x] 4.4 Integration tests for the full approval flow with real Redis and Postgres
   - Approve flow: insert a pending ticket, start `WaitForDecision`, call `UpdateStatus("approved")` + `Publish("approved")` concurrently, verify `WaitForDecision` returns `ApprovalDecision{Approved: true}`
   - Deny flow: same structure with `"denied"`, verify `Approved: false` returned
   - Timeout flow: configure a short timeout (e.g. 100ms); verify `UpdateStatus("expired")` is called and `ErrApprovalTimeout` is returned
