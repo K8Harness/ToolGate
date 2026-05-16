@@ -34,8 +34,10 @@ type SlackClient struct {
 }
 
 // NewSlackClient constructs a production-ready SlackClient.
-func NewSlackClient(botToken, channel string, log *slog.Logger) *SlackClient {
-	return newSlackClientWithHTTP(botToken, channel, &http.Client{}, log)
+func NewSlackClient(botToken, channel, baseURL string, log *slog.Logger) *SlackClient {
+	sc := newSlackClientWithHTTP(botToken, channel, &http.Client{}, log)
+	sc.apiBaseURL = baseURL
+	return sc
 }
 
 // newSlackClientWithHTTP constructs a SlackClient with an injected HTTP client.

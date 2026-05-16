@@ -33,6 +33,7 @@ type Config struct {
 	SlackBotToken      string // SLACK_BOT_TOKEN     (required)
 	SlackSigningSecret string // SLACK_SIGNING_SECRET (required)
 	SlackChannel       string // SLACK_CHANNEL        (required)
+	SlackAPIBaseURL    string // SLACK_API_BASE_URL   (optional, default "https://slack.com/api")
 }
 
 func LoadConfig() (*Config, error) {
@@ -105,6 +106,7 @@ func LoadConfig() (*Config, error) {
 		SlackBotToken:      slackBotToken,
 		SlackSigningSecret: slackSigningSecret,
 		SlackChannel:       slackChannel,
+		SlackAPIBaseURL:    envString("SLACK_API_BASE_URL", slackAPIBaseURL),
 	}, nil
 }
 

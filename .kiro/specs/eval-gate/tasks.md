@@ -119,7 +119,7 @@
   - _Boundary: Demo Agent_
 
 - [ ] 6. Gateway extensions — redact action and configurable Slack API base URL
-- [ ] 6.1 Add `SLACK_API_BASE_URL` config field to the gateway
+- [x] 6.1 Add `SLACK_API_BASE_URL` config field to the gateway
   - Add optional `SlackAPIBaseURL string` to `Config` in `cmd/gateway/config.go`; load from `SLACK_API_BASE_URL` env var with default `"https://slack.com/api"`
   - Update `SlackNotifier` in `cmd/gateway/slack_notifier.go` to use `cfg.SlackAPIBaseURL` as the API base when constructing the `chat.postMessage` request URL, replacing the hardcoded string
   - Observable: starting the gateway with `SLACK_API_BASE_URL=http://mock-slack:8090/api` causes `chat.postMessage` HTTP requests to be sent to `http://mock-slack:8090/api/chat.postMessage`; starting without `SLACK_API_BASE_URL` preserves existing behavior with `https://slack.com/api`; `go build ./cmd/gateway` succeeds
