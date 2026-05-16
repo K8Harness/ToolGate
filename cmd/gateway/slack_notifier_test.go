@@ -335,7 +335,7 @@ func TestNewSlackClientReturnsSensibleDefaults(t *testing.T) {
 	botToken := "xoxb-new-client"
 	channel := "C-NEW"
 	log := slog.Default()
-	client := NewSlackClient(botToken, channel, log)
+	client := NewSlackClient(botToken, channel, slackAPIBaseURL, log)
 
 	if client.botToken != botToken {
 		t.Errorf("client.botToken = %q, want %q", client.botToken, botToken)
