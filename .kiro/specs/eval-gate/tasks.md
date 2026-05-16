@@ -177,7 +177,7 @@
   - _Requirements: 1.3, 2.1, 2.3, 2.4, 3.1, 3.2, 3.3, 3.4, 3.5, 4.3, 6.1, 6.2, 6.3, 6.4_
 
 - [ ] 9. Validation — unit, integration, and E2E tests
-- [ ] 9.1 (P) Unit tests for EvalSuiteLoader
+- [x] 9.1 (P) Unit tests for EvalSuiteLoader
   - Test valid YAML with all fields (including `mustNotContainInArgs`) loads correctly into `EvalSuite.Cases`
   - Test YAML with an unknown top-level field (e.g., `futureField: true`) is accepted without error
   - Test missing `policyOutcome` returns a descriptive error
