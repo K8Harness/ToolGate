@@ -164,14 +164,15 @@
   - _Blocked: spec conflict — the demo agent/policy/EvalSuite use tool names `refund_small`, `refund_large`, `delete_record`, and `send_slack_message`, but the assembled gateway forwards to a single `UPSTREAM_MCP_URL` and the fake upstream servers expose incompatible tool contracts (`create_charge`, `get_customer`, `create_ticket`, `close_ticket`, `send_slack_message`). Human decision required on the runtime contract and task ordering before `make demo` can be made to pass._
 
 - [ ] 8. Integration — wire eval-runner main loop end-to-end
-- [ ] 8.1 Wire all eval-runner components into `main.go`
+- [x] 8.1 Wire all eval-runner components into `main.go`
   - In `main.go`: call `LoadConfig()` — exit non-zero on error; detect Docker via `exec.LookPath` — exit non-zero with diagnostic if missing
   - Load EvalSuite via `LoadSuite(suitePath)` — exit non-zero on parse error (before compose up)
-  - Open pgxpool connection to `Config.PostgresDSN` — exit non-zero on connection failure (before compose up)
   - Create `Orchestrator`, call `Up(ctx)` — exit non-zero on startup failure; defer `Down(ctx)` unconditionally after `Up` returns nil
+  - After `Orchestrator.Up(ctx)` succeeds and before the case loop begins, open the pgxpool connection to `Config.PostgresDSN`; exit non-zero on connection failure and still run deferred compose teardown
   - Create `CaseRunner`; for each case: call `Run`, handle error (mark case failed, continue), call `Evaluate(case, trace)`, print case status line (`[PASS]` or `[FAIL]` + case name)
+  - Print per-case progress as execution proceeds: emit a running status before each case, then the final pass/fail status for that case
   - Call `GenerateReport(results)` and print to stdout; call `os.Exit(ExitCode(results))`
-  - Observable: `go run ./cmd/eval-runner evalsuite/default.yaml` with all env vars set and a running demo agent runs the full loop end-to-end, prints per-case status, and exits with the correct code; a missing `POSTGRES_DSN` exits before compose up; a compose startup failure exits after printing the compose stderr excerpt
+  - Observable: `go run ./cmd/eval-runner evalsuite/default.yaml` with all env vars set and a running demo agent runs the full loop end-to-end, prints running and pass/fail per-case status, and exits with the correct code; a missing `POSTGRES_DSN` exits after compose startup but before any case executes; a compose startup failure exits after printing the compose stderr excerpt
   - _Depends: 2.1, 2.2, 2.3, 3.1, 3.2_
   - _Requirements: 1.3, 2.1, 2.3, 2.4, 3.1, 3.2, 3.3, 3.4, 3.5, 4.3, 6.1, 6.2, 6.3, 6.4_
 
