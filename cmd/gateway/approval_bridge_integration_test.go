@@ -136,8 +136,8 @@ func TestApprovalBridgeIntegrationUpdateStatusIsIdempotent(t *testing.T) {
 
 func TestApprovalBridgeIntegrationExtendsSessionLockWhileWaiting(t *testing.T) {
 	ctx := context.Background()
-	lockTTL := 200 * time.Millisecond
-	pool, redisClient, store, locker, bridge := newApprovalBridgeIntegrationHarness(t, 2*time.Second, lockTTL, 50*time.Millisecond)
+	lockTTL := 2 * time.Second // large enough that the lock survives subscriber setup under -race
+	pool, redisClient, store, locker, bridge := newApprovalBridgeIntegrationHarness(t, 10*time.Second, lockTTL, 50*time.Millisecond)
 
 	sessionID := "session-extend-int"
 	turnID := "turn-extend-int"

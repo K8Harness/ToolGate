@@ -207,12 +207,17 @@ rules:
 	config := &Config{
 		ListenPort:      8080,
 		PolicyFilePath:  policyPath,
-		PostgresDSN:     dsn,
-		RedisDSN:        testRedisDSN(t),
-		UpstreamMCPURL:  upstream.URL,
-		TurnIDHeader:    defaultTurnIDHeader,
-		UpstreamTimeout: time.Second,
-		SessionTTL:      time.Minute,
+		PostgresDSN:        dsn,
+		RedisDSN:           testRedisDSN(t),
+		UpstreamMCPURL:     upstream.URL,
+		TurnIDHeader:       defaultTurnIDHeader,
+		UpstreamTimeout:    time.Second,
+		SessionTTL:         time.Minute,
+		SessionLockTTL:     defaultSessionLockTTL,
+		LockAcquireTimeout: defaultLockAcquireTimeout,
+		SlackBotToken:      "test-token",
+		SlackSigningSecret: "test-secret",
+		SlackChannel:       "#test",
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -224,7 +229,10 @@ rules:
 
 	sessionID := server.sessions.Create().ID
 	ts := httptest.NewServer(server)
-	defer ts.Close()
+	defer func() {
+		ts.CloseClientConnections()
+		ts.Close()
+	}()
 
 	rec := postJSON(t, ts.URL+"/mcp", sessionID, "turn-1", `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"delete_record","arguments":{"id":"abc"}}}`)
 

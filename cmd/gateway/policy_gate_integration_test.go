@@ -254,6 +254,7 @@ func newPolicyGateIntegrationHarness(t *testing.T, policyContents string) (*pgxp
 	ts := httptest.NewServer(server)
 
 	cleanup := func() {
+		ts.CloseClientConnections() // cancel in-flight approval holds before Close waits on them
 		ts.Close()
 		cleanupServer()
 		upstream.Close()

@@ -90,7 +90,7 @@ func TestMigrateSchemaCreatesExpectedTablesIndexesAndConstraints(t *testing.T) {
 		ctx,
 		pool,
 		"ticket",
-		[]string{"status", "pending", "approved", "rejected", "expired", "cancelled"},
+		[]string{"status", "pending", "approved", "denied", "expired", "cancelled"},
 	)
 }
 
