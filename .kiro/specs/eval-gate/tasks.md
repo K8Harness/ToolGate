@@ -77,7 +77,7 @@
   - _Requirements: 8.1, 8.2, 8.3, 8.4_
   - _Boundary: Fake Stripe Server_
 
-- [ ] 4.2 (P) Build the fake Zendesk MCP server
+- [x] 4.2 (P) Build the fake Zendesk MCP server
   - Create `examples/fake-mcp-servers/zendesk/main.go` with the same go-sdk pattern
   - Register `create_ticket(subject string, description string, customer_id string)` returning `{"id":"tkt_fake_001","status":"open"}`
   - Register `close_ticket(ticket_id string)` returning `{"id":<ticket_id>,"status":"closed"}`
