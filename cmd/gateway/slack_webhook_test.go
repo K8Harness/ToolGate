@@ -24,6 +24,7 @@ type mockTicketStore struct {
 	updateStatusStatus string
 	updateStatusBy     string
 	updateStatusErr    error
+	calls              *[]string
 }
 
 func (m *mockTicketStore) UpdateStatus(_ context.Context, id, status, decidedBy string) error {
@@ -31,6 +32,9 @@ func (m *mockTicketStore) UpdateStatus(_ context.Context, id, status, decidedBy 
 	m.updateStatusID = id
 	m.updateStatusStatus = status
 	m.updateStatusBy = decidedBy
+	if m.calls != nil {
+		*m.calls = append(*m.calls, "update")
+	}
 	return m.updateStatusErr
 }
 
@@ -40,12 +44,16 @@ type mockRedisPublisher struct {
 	publishChannel string
 	publishMessage string
 	publishErr     error
+	calls          *[]string
 }
 
 func (m *mockRedisPublisher) Publish(_ context.Context, channel string, message interface{}) error {
 	m.publishCalled = true
 	m.publishChannel = channel
 	m.publishMessage = fmt.Sprintf("%v", message)
+	if m.calls != nil {
+		*m.calls = append(*m.calls, "publish")
+	}
 	return m.publishErr
 }
 
@@ -110,8 +118,9 @@ func TestSlackWebhookApproveAction(t *testing.T) {
 	const ticketID = "ticket-approve-001"
 	const userID = "U12345"
 
-	tickets := &mockTicketStore{}
-	redis := &mockRedisPublisher{}
+	var calls []string
+	tickets := &mockTicketStore{calls: &calls}
+	redis := &mockRedisPublisher{calls: &calls}
 	handler := newSlackWebhookTestHandler(signingSecret, tickets, redis)
 
 	body := buildSlackActionBody(t, "approval_approve", ticketID, userID)
@@ -145,6 +154,9 @@ func TestSlackWebhookApproveAction(t *testing.T) {
 	if redis.publishMessage != "approved" {
 		t.Errorf("Redis Publish message = %q, want %q", redis.publishMessage, "approved")
 	}
+	if got, want := strings.Join(calls, ","), "update,publish"; got != want {
+		t.Errorf("call order = %q, want %q", got, want)
+	}
 }
 
 // TestSlackWebhookDenyAction verifies that a valid deny action results in:
@@ -158,8 +170,9 @@ func TestSlackWebhookDenyAction(t *testing.T) {
 	const ticketID = "ticket-deny-002"
 	const userID = "U67890"
 
-	tickets := &mockTicketStore{}
-	redis := &mockRedisPublisher{}
+	var calls []string
+	tickets := &mockTicketStore{calls: &calls}
+	redis := &mockRedisPublisher{calls: &calls}
 	handler := newSlackWebhookTestHandler(signingSecret, tickets, redis)
 
 	body := buildSlackActionBody(t, "approval_deny", ticketID, userID)
@@ -174,6 +187,9 @@ func TestSlackWebhookDenyAction(t *testing.T) {
 	if !tickets.updateStatusCalled {
 		t.Fatal("UpdateStatus not called, want called with 'denied'")
 	}
+	if tickets.updateStatusID != ticketID {
+		t.Errorf("UpdateStatus ticketID = %q, want %q", tickets.updateStatusID, ticketID)
+	}
 	if tickets.updateStatusStatus != "denied" {
 		t.Errorf("UpdateStatus status = %q, want %q", tickets.updateStatusStatus, "denied")
 	}
@@ -183,8 +199,15 @@ func TestSlackWebhookDenyAction(t *testing.T) {
 	if !redis.publishCalled {
 		t.Fatal("Redis Publish not called on deny action")
 	}
+	wantChannel := "approvals:" + ticketID
+	if redis.publishChannel != wantChannel {
+		t.Errorf("Redis Publish channel = %q, want %q", redis.publishChannel, wantChannel)
+	}
 	if redis.publishMessage != "denied" {
 		t.Errorf("Redis Publish message = %q, want %q", redis.publishMessage, "denied")
+	}
+	if got, want := strings.Join(calls, ","), "update,publish"; got != want {
+		t.Errorf("call order = %q, want %q", got, want)
 	}
 }
 

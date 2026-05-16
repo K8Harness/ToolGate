@@ -77,7 +77,7 @@
   - _Requirements: 1.1, 1.2, 1.5, 5.1, 5.2, 5.3, 5.4_
   - _Boundary: RedisApprovalBridge_
 
-- [ ] 4.2 (P) Unit tests for the Slack webhook handler
+- [x] 4.2 (P) Unit tests for the Slack webhook handler
   - Test that a correctly signed approve action updates the ticket to `"approved"` and publishes a resume signal, returning HTTP 200
   - Test that a correctly signed deny action updates the ticket to `"denied"` and publishes a resume signal, returning HTTP 200
   - Test that a request with a mismatched HMAC signature returns HTTP 400 and no DB or Redis calls are made
