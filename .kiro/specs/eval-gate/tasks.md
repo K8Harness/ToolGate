@@ -107,7 +107,7 @@
   - _Requirements: 10.2, 10.3_
   - _Boundary: Mock Slack Service_
 
-- [ ] 5.2 (P) Build the Python demo agent with HTTP trigger endpoint
+- [x] 5.2 (P) Build the Python demo agent with HTTP trigger endpoint
   - Create `examples/support-agent/agent.py` with a Flask `POST /trigger` endpoint
   - Implement keyword dispatch table: `small-refund` → `refund_small({amount:50, customer_id:"cust_001"})`, `large-refund` → `refund_large({amount:12000, customer_id:"cust_002"})`, `delete-customer` → `delete_record({customer_id:"cust_003"})`, `slack-pii-message` → `send_slack_message({channel:"#support", message:"Customer SSN: 123-45-6789"})`
   - Generate a UUID `session_id` per trigger call; include it as `Mcp-Session-Id` header in all MCP requests to the gateway
