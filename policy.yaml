@@ -5,6 +5,10 @@ rules:
     action: approvalRequired
   - tool: delete_record
     action: deny
+  - tool: send_slack_message
+    action: redact
+    redactFields:
+      - message
 budgets:
   maxToolCallsPerTurn: 5
 defaultAction: deny

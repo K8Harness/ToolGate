@@ -126,7 +126,7 @@
   - _Requirements: 10.2, 10.3_
   - _Boundary: Gateway config, SlackNotifier_
 
-- [ ] 6.2 Implement the `redact` policy action in the gateway
+- [x] 6.2 Implement the `redact` policy action in the gateway
   - Add optional `RedactFields []string \`yaml:"redactFields"\`` to the `Rule` struct in `core/policy/policy.go`; existing policy YAML files without this field continue to load without error
   - Add `case "redact":` to the action switch in `cmd/gateway/policy_gate.go`: deep-copy `req.Params.Arguments` map, replace the value of each field listed in `RedactFields` with the string `"***REDACTED***"` (skip fields not present), call `auditWriter.Write` with `decision="allow"` and the post-redaction arguments, set `req.Params.Arguments` to the masked copy, return `(nil, nil)` to continue to the upstream forwarder
   - Add `redact` rule for `send_slack_message` with `redactFields: ["message"]` to `policy.yaml`

@@ -32,7 +32,7 @@ func LoadPolicy(path string) (*AgentPolicy, error) {
 func Evaluate(policy *AgentPolicy, toolName string) PolicyDecision {
 	for _, rule := range policy.Rules {
 		if rule.Tool == toolName {
-			return PolicyDecision{Action: rule.Action}
+			return PolicyDecision{Action: rule.Action, RedactFields: rule.RedactFields}
 		}
 	}
 
@@ -40,7 +40,7 @@ func Evaluate(policy *AgentPolicy, toolName string) PolicyDecision {
 }
 
 func validatePolicy(policy *AgentPolicy) error {
-	if !isRuleAction(policy.DefaultAction) || policy.DefaultAction == ActionApprovalRequired {
+	if !isRuleAction(policy.DefaultAction) || policy.DefaultAction == ActionApprovalRequired || policy.DefaultAction == ActionRedact {
 		return fmt.Errorf("defaultAction %q must be allow or deny", policy.DefaultAction)
 	}
 
@@ -64,7 +64,7 @@ func validatePolicy(policy *AgentPolicy) error {
 
 func isRuleAction(action Action) bool {
 	switch action {
-	case ActionAllow, ActionDeny, ActionApprovalRequired:
+	case ActionAllow, ActionDeny, ActionApprovalRequired, ActionRedact:
 		return true
 	default:
 		return false
