@@ -25,7 +25,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4_
   - _Boundary: EvalSuiteLoader_
 
-- [ ] 2.2 (P) Build the evaluator
+- [x] 2.2 (P) Build the evaluator
   - Implement `Evaluate(c EvalCase, trace []TraceRow) CaseResult` in `cmd/eval-runner/evaluator.go` using types from `types.go`
   - `mustInclude`: subsequence match — walk the `mustInclude` list; for each item, advance a pointer through the trace until found or exhausted; out-of-order fails
   - `mustNotInclude`: verify no trace row's `ToolName` equals any listed item (set membership)
