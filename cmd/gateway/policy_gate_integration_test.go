@@ -106,7 +106,7 @@ rules:
 		req.Header.Set(defaultTurnIDHeader, "turn-approval")
 		resp, err := http.DefaultClient.Do(req)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}()
 
