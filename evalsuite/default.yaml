@@ -1,0 +1,26 @@
+cases:
+  - name: small-refund-allow
+    input: small-refund
+    mustInclude:
+      - refund_small
+    policyOutcome: allow
+
+  - name: large-refund-approval
+    input: large-refund
+    mustInclude:
+      - refund_large
+    policyOutcome: approvalRequired
+
+  - name: delete-customer-deny
+    input: delete-customer
+    mustInclude:
+      - delete_record
+    policyOutcome: deny
+
+  - name: slack-pii-redact
+    input: slack-pii-message
+    mustInclude:
+      - send_slack_message
+    policyOutcome: allow
+    mustNotContainInArgs:
+      - "123-45-6789"
