@@ -10,6 +10,13 @@
 *.out
 vendor/
 go.sum.bak
+# Go build outputs at repo root (no extension on macOS/Linux)
+/eval-runner
+/gateway
+/mock-slack
+/slack
+/stripe
+/zendesk
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
