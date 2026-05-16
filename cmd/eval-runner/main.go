@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,12 @@ import (
 )
 
 const defaultSuitePath = "evalsuite/default.yaml"
+const defaultComposeProjectName = "eval-gate"
+
+type stackOrchestrator interface {
+	Up(ctx context.Context) error
+	Down(ctx context.Context) error
+}
 
 type evalRunnerDeps struct {
 	args       []string
@@ -17,7 +24,8 @@ type evalRunnerDeps struct {
 	stderr     io.Writer
 	lookPath   func(file string) (string, error)
 	loadConfig func() (*Config, error)
-	loadSuite  func(path string) error
+	loadSuite  func(path string) (*EvalSuite, error)
+	newOrch    func(cfg *Config) stackOrchestrator
 }
 
 func main() {
@@ -27,17 +35,23 @@ func main() {
 		stderr:     os.Stderr,
 		lookPath:   exec.LookPath,
 		loadConfig: LoadConfig,
-		loadSuite:  probeSuiteFile,
+		loadSuite:  LoadSuite,
+		newOrch: func(cfg *Config) stackOrchestrator {
+			return NewOrchestrator(cfg.ComposeFile, defaultComposeProjectName)
+		},
 	}))
 }
 
-func run(deps evalRunnerDeps) int {
+func run(deps evalRunnerDeps) (exitCode int) {
+	exitCode = 0
+
 	if _, err := deps.lookPath("docker"); err != nil {
 		fmt.Fprintln(deps.stderr, "docker not found in PATH")
 		return 1
 	}
 
-	if _, err := deps.loadConfig(); err != nil {
+	cfg, err := deps.loadConfig()
+	if err != nil {
 		fmt.Fprintln(deps.stderr, err.Error())
 		return 1
 	}
@@ -48,13 +62,28 @@ func run(deps evalRunnerDeps) int {
 		return 2
 	}
 
-	if err := deps.loadSuite(suitePath); err != nil {
+	if _, err := deps.loadSuite(suitePath); err != nil {
 		fmt.Fprintln(deps.stderr, formatSuiteLoadError(suitePath, err))
 		return 1
 	}
 
-	fmt.Fprintf(deps.stdout, "Eval suite %q loaded; runner orchestration is deferred to task 8.1.\n", suitePath)
-	return 1
+	orchestrator := deps.newOrch(cfg)
+	if err := orchestrator.Up(context.Background()); err != nil {
+		fmt.Fprintln(deps.stderr, err.Error())
+		return 1
+	}
+
+	defer func() {
+		if err := orchestrator.Down(context.Background()); err != nil {
+			fmt.Fprintln(deps.stderr, err.Error())
+			if exitCode == 0 {
+				exitCode = 1
+			}
+		}
+	}()
+
+	fmt.Fprintf(deps.stdout, "Eval suite %q loaded; stack lifecycle complete, case execution/report wiring is deferred to task 8.1.\n", suitePath)
+	return exitCode
 }
 
 func resolveSuitePath(args []string) (string, error) {
@@ -66,11 +95,6 @@ func resolveSuitePath(args []string) (string, error) {
 	default:
 		return "", fmt.Errorf("expected at most one eval suite path argument")
 	}
-}
-
-func probeSuiteFile(path string) error {
-	_, err := os.ReadFile(path)
-	return err
 }
 
 func formatSuiteLoadError(path string, err error) string {
