@@ -20,7 +20,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      fake-stripe:
+      fake-upstream:
         condition: service_healthy
     environment:
       GATEWAY_PORT: "8080"
@@ -33,7 +33,7 @@ services:
       SLACK_API_BASE_URL: http://mock-slack:8090/api
       SESSION_LOCK_TTL: "3s"
       LOCK_ACQUIRE_TIMEOUT: "5s"
-      UPSTREAM_MCP_URL: http://fake-stripe:8082/mcp
+      UPSTREAM_MCP_URL: http://fake-upstream:8081/mcp
     healthcheck:
       test:
         [
@@ -62,7 +62,7 @@ services:
       retries: 12
       start_period: 5s
     ports:
-      - "5432:5432"
+      - "15432:5432"
     tmpfs:
       - /var/lib/postgresql/data
     networks:
@@ -90,6 +90,29 @@ services:
         [
           "CMD-SHELL",
           "wget -q -O /dev/null --header='Content-Type: application/json' --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0.0\"}}}' http://127.0.0.1:8082/mcp",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - eval-gate
+
+  fake-upstream:
+    build:
+      context: ..
+      dockerfile_inline: |
+        FROM python:3.12-alpine
+        WORKDIR /app
+        COPY scripts/fake_upstream.py /app/fake_upstream.py
+        ENTRYPOINT ["python", "/app/fake_upstream.py"]
+    expose:
+      - "8081"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null --header='Content-Type: application/json' --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"client\":\"healthcheck\"}}' http://127.0.0.1:8081/mcp",
         ]
       interval: 5s
       timeout: 5s
@@ -163,7 +186,7 @@ services:
       gateway:
         condition: service_healthy
     environment:
-      GATEWAY_URL: http://gateway:8080
+      GATEWAY_URL: http://gateway:8080/mcp
     healthcheck:
       test:
         [
@@ -177,11 +200,10 @@ services:
       retries: 12
       start_period: 5s
     ports:
-      - "8085:8085"
+      - "18085:8085"
     networks:
       - eval-gate
 
 networks:
   eval-gate:
     driver: bridge
-    internal: true
