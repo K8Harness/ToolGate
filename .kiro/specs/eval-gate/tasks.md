@@ -17,7 +17,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.5_
 
 - [ ] 2. Core — loader, evaluator, and reporter
-- [ ] 2.1 (P) Build the EvalSuite YAML loader
+- [x] 2.1 (P) Build the EvalSuite YAML loader
   - Implement `LoadSuite(path string) (*EvalSuite, error)` in `cmd/eval-runner/suite.go`; populate `EvalCase` values using types from `types.go`
   - Use the default `yaml.v3` decoder (do NOT call `KnownFields(true)`); silently accept unknown fields for forward-compatibility
   - Post-decode: validate `policyOutcome` for each case against the allowed enum (`allow`, `deny`, `approvalRequired`, `expired`); return an error naming the case and the invalid value
