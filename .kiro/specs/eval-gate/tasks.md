@@ -197,7 +197,7 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
   - _Boundary: Evaluator_
 
-- [ ] 9.3 (P) Unit tests for the reporter
+- [x] 9.3 (P) Unit tests for the reporter
   - Test all-pass input: `GenerateReport` produces a string whose exact last line is `"PASS"`; `ExitCode` returns 0
   - Test one-failure input: last line is exactly `"FAIL: 1 case(s) failed"`; `ExitCode` returns 1
   - Test two-failure input: last line is `"FAIL: 2 case(s) failed"`
