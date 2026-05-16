@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Foundation — configuration and persistence extension
+- [x] 1. Foundation — configuration and persistence extension
 - [x] 1.1 Extend gateway configuration with Slack environment variables
   - Add three required Slack fields to the Config struct: bot token, signing secret, and channel identifier
   - `LoadConfig()` reads each from its corresponding env var; if any is absent after loading, return an error that names the missing variable(s)
@@ -15,7 +15,7 @@
   - A ticket in `pending` status is correctly transitioned to `approved` by a verified approve action — observable via DB row state after the call
   - _Requirements: 4.1, 4.2, 4.3, 5.2_
 
-- [ ] 2. Core — approval-flow components
+- [x] 2. Core — approval-flow components
 - [x] 2.1 (P) Build the approval hold bridge
   - Implement the `ApprovalBridge` interface with a method that blocks the calling goroutine until a resume signal is received, the context is cancelled, or a 5-minute timeout fires
   - The concrete implementation subscribes to a per-ticket notification channel on Redis when the wait begins; the subscription is cleaned up on any exit path
@@ -47,7 +47,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4, 5.4_
   - _Boundary: SlackWebhookHandler_
 
-- [ ] 3. Integration — pipeline modification and binary wiring
+- [x] 3. Integration — pipeline modification and binary wiring
 - [x] 3.1 Modify the policy gate approval path to hold the connection
   - Change the `approvalRequired` branch in `PolicyGateHandler` to invoke the approval hold and Slack notification instead of returning a pending response immediately
   - After inserting the ticket, launch a goroutine to send the Slack notification; notification failures are logged and do not block the approval hold
@@ -66,7 +66,7 @@
   - The running gateway accepts `POST /slack/actions` and responds with HTTP 400 for unsigned requests — observable by sending an unsigned request to a running gateway instance
   - _Requirements: 3.1, 6.1, 6.2, 6.3_
 
-- [ ] 4. Validation — unit, integration, and E2E tests
+- [x] 4. Validation — unit, integration, and E2E tests
 - [x] 4.1 (P) Unit tests for the approval hold bridge
   - Test that a received `"approved"` signal causes `WaitForDecision` to return `ApprovalDecision{Approved: true}`
   - Test that a received `"denied"` signal causes `WaitForDecision` to return `ApprovalDecision{Approved: false}`

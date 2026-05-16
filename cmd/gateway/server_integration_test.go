@@ -248,7 +248,7 @@ func TestGatewayIntegrationSSEKeepalive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /mcp: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	reader := bufio.NewReader(resp.Body)
 	line, err := reader.ReadString('\n')
@@ -465,7 +465,7 @@ func postRaw(t *testing.T, url, sessionID, turnID, body string) *httptest.Respon
 	if err != nil {
 		t.Fatalf("POST %s: %v", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	rec.Code = resp.StatusCode
 	for k, values := range resp.Header {

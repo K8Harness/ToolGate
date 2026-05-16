@@ -138,7 +138,7 @@ func NewRedisApprovalBridge(
 func (b *RedisApprovalBridge) WaitForDecision(ctx context.Context, ticketID, sessionID, turnID string) (ApprovalDecision, error) {
 	channelName := "approvals:" + ticketID
 	pubsub := b.newPubSub(ctx, channelName)
-	defer pubsub.Close()
+	defer func() { _ = pubsub.Close() }()
 
 	ticker := time.NewTicker(b.lockExtendInterval)
 	defer ticker.Stop()

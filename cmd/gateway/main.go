@@ -66,12 +66,12 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 
 	pool, err := NewDBPool(ctx, config.PostgresDSN)
 	if err != nil {
-		redisClient.Close()
+		_ = redisClient.Close()
 		return nil, nil, fmt.Errorf("postgres initialization failed: %w", err)
 	}
 
 	cleanup := func() {
-		redisClient.Close()
+		_ = redisClient.Close()
 		pool.Close()
 	}
 
@@ -85,7 +85,7 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 	auditWriter.Start(ctx)
 	ticketStore := NewTicketStore(pool)
 	sessionLocker := NewSessionLocker(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)
-	slackNotifier := NewSlackClient(config.SlackBotToken, config.SlackChannel, logger)
+	slackNotifier := NewSlackClient(config.SlackBotToken, config.SlackChannel, config.SlackAPIBaseURL, logger)
 	approvalBridge := NewRedisApprovalBridge(redisClient, ticketStore, sessionLocker, config.SessionLockTTL, logger)
 	slackWebhook := NewSlackWebhookHandler(config.SlackSigningSecret, ticketStore, redisClient, logger)
 	policyGate := NewPolicyGateHandler(policy, budgetTracker, auditWriter, ticketStore, approvalBridge, slackNotifier, logger)

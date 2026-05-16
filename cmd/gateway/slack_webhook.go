@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -240,20 +239,4 @@ func (h *SlackWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	// Step 9: Return HTTP 200 to dismiss the Slack button interaction (req 4.4).
 	w.WriteHeader(http.StatusOK)
-}
-
-// verifySlackSignature is exported for use in integration tests and server wiring.
-// It computes and compares the HMAC-SHA256 signature per Slack's signing algorithm.
-// Returns true if the signature is valid.
-func verifySlackSignature(signingSecret, timestamp string, rawBody []byte, providedSig string) bool {
-	baseString := "v0:" + timestamp + ":" + string(rawBody)
-	mac := hmac.New(sha256.New, []byte(signingSecret))
-	mac.Write([]byte(baseString))
-	expected := "v0=" + hex.EncodeToString(mac.Sum(nil))
-
-	// Normalize: ensure both start with "v0=" prefix for consistent comparison
-	if !strings.HasPrefix(providedSig, "v0=") {
-		return false
-	}
-	return hmac.Equal([]byte(expected), []byte(providedSig))
 }

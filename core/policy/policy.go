@@ -6,11 +6,13 @@ const (
 	ActionAllow            Action = "allow"
 	ActionDeny             Action = "deny"
 	ActionApprovalRequired Action = "approvalRequired"
+	ActionRedact           Action = "redact"
 )
 
 type PolicyRule struct {
-	Tool   string `yaml:"tool"`
-	Action Action `yaml:"action"`
+	Tool         string   `yaml:"tool"`
+	Action       Action   `yaml:"action"`
+	RedactFields []string `yaml:"redactFields,omitempty"`
 }
 
 type Budgets struct {
@@ -25,5 +27,6 @@ type AgentPolicy struct {
 }
 
 type PolicyDecision struct {
-	Action Action
+	Action       Action
+	RedactFields []string
 }

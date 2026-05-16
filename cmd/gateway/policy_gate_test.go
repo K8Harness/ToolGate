@@ -329,15 +329,6 @@ func testPolicyGateToolsCallRequest() *mcp.JSONRPCRequest {
 	}
 }
 
-func decodePolicyGateResult(t *testing.T, raw json.RawMessage) map[string]any {
-	t.Helper()
-	var result map[string]any
-	if err := json.Unmarshal(raw, &result); err != nil {
-		t.Fatalf("json.Unmarshal(result) error = %v, want nil", err)
-	}
-	return result
-}
-
 type policyGateAuditStub struct {
 	records []AuditRecord
 }
@@ -621,6 +612,123 @@ func TestPolicyGateHandlerApprovalHoldTimeoutReturnsTimeoutError(t *testing.T) {
 	}
 }
 
+func TestPolicyGateHandlerRedactMasksFieldAndAuditsAllow(t *testing.T) {
+	audit := &policyGateAuditStub{}
+	evaluator := &policyGateEvaluatorStub{
+		decision: corepolicy.PolicyDecision{
+			Action:       corepolicy.ActionRedact,
+			RedactFields: []string{"message"},
+		},
+	}
+	handler := newPolicyGateHandler(
+		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
+		NewBudgetTracker(),
+		audit,
+		&policyGateTicketStub{},
+		evaluator,
+		nil,
+		nil,
+		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		nowStub(time.Unix(0, 0)),
+	)
+
+	req := &mcp.JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"send_slack_message","arguments":{"message":"secret content","channel":"#general"}}`),
+	}
+
+	resp, err := handler.Handle(contextWithSessionAndTurn("session-redact", "turn-redact"), req)
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	// redact returns (nil, nil) — pipeline continues
+	if resp != nil {
+		t.Fatalf("Handle() response = %#v, want nil (pipeline continues)", resp)
+	}
+
+	// Exactly one audit record
+	if got := len(audit.records); got != 1 {
+		t.Fatalf("audit writes = %d, want 1", got)
+	}
+	record := audit.records[0]
+
+	// Audit decision must be "allow"
+	if record.Decision != "allow" {
+		t.Fatalf("audit decision = %q, want %q", record.Decision, "allow")
+	}
+
+	// Audit arguments must contain REDACTED value for "message"
+	var args map[string]any
+	if err := json.Unmarshal(record.Arguments, &args); err != nil {
+		t.Fatalf("json.Unmarshal(audit.Arguments): %v", err)
+	}
+	if args["message"] != "***REDACTED***" {
+		t.Fatalf("audit args[message] = %v, want ***REDACTED***", args["message"])
+	}
+	// Fields not in redactFields are preserved
+	if args["channel"] != "#general" {
+		t.Fatalf("audit args[channel] = %v, want #general", args["channel"])
+	}
+
+	// req.Params must be updated with redacted args
+	var updatedParams toolCallParams
+	if err := json.Unmarshal(req.Params, &updatedParams); err != nil {
+		t.Fatalf("json.Unmarshal(req.Params): %v", err)
+	}
+	var updatedArgs map[string]any
+	if err := json.Unmarshal(updatedParams.Arguments, &updatedArgs); err != nil {
+		t.Fatalf("json.Unmarshal(req.Params.Arguments): %v", err)
+	}
+	if updatedArgs["message"] != "***REDACTED***" {
+		t.Fatalf("req.Params message = %v, want ***REDACTED***", updatedArgs["message"])
+	}
+}
+
+func TestPolicyGateHandlerRedactSkipsMissingField(t *testing.T) {
+	audit := &policyGateAuditStub{}
+	evaluator := &policyGateEvaluatorStub{
+		decision: corepolicy.PolicyDecision{
+			Action:       corepolicy.ActionRedact,
+			RedactFields: []string{"nonexistent_field"},
+		},
+	}
+	handler := newPolicyGateHandler(
+		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
+		NewBudgetTracker(),
+		audit,
+		&policyGateTicketStub{},
+		evaluator,
+		nil,
+		nil,
+		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		nowStub(time.Unix(0, 0)),
+	)
+
+	req := &mcp.JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"send_slack_message","arguments":{"channel":"#general"}}`),
+	}
+
+	resp, err := handler.Handle(contextWithSessionAndTurn("session-redact-skip", "turn-redact-skip"), req)
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil", err)
+	}
+	if resp != nil {
+		t.Fatalf("Handle() response = %#v, want nil", resp)
+	}
+	// Should still write audit with decision "allow"
+	if got := len(audit.records); got != 1 {
+		t.Fatalf("audit writes = %d, want 1", got)
+	}
+	if audit.records[0].Decision != "allow" {
+		t.Fatalf("audit decision = %q, want allow", audit.records[0].Decision)
+	}
+}
+
 func TestPolicyGateHandlerApprovalHoldNotifierErrorDoesNotBlockBridge(t *testing.T) {
 	// Even if notifier returns an error, WaitForDecision must still be called.
 	var buf policyGateLockedBuffer
@@ -655,10 +763,7 @@ func TestPolicyGateHandlerApprovalHoldNotifierErrorDoesNotBlockBridge(t *testing
 		t.Fatal("notifier.SendApprovalRequest was not called within 1 second")
 	}
 	deadline := time.Now().Add(time.Second)
-	for {
-		if strings.Contains(buf.String(), "slack notification failed") {
-			break
-		}
+	for !strings.Contains(buf.String(), "slack notification failed") {
 		if time.Now().After(deadline) {
 			t.Fatalf("logs = %q, want slack notification failure entry", buf.String())
 		}

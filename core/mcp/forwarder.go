@@ -63,7 +63,7 @@ func (f *UpstreamForwarder) Handle(ctx context.Context, req *JSONRPCRequest) (*J
 	if err != nil {
 		return nil, wrapUpstreamError(upstreamFailureMessage(err), err)
 	}
-	defer httpResp.Body.Close()
+	defer func() { _ = httpResp.Body.Close() }()
 
 	if httpResp.StatusCode != http.StatusOK {
 		return nil, wrapUpstreamError(fmt.Sprintf("upstream returned status %d", httpResp.StatusCode), nil)
