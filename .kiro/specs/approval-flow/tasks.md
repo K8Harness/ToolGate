@@ -86,7 +86,7 @@
   - _Requirements: 3.2, 3.3, 3.4, 4.1, 4.2, 4.3, 4.4, 5.4_
   - _Boundary: SlackWebhookHandler_
 
-- [ ] 4.3 (P) Unit tests for the Slack notifier and policy gate approval path
+- [x] 4.3 (P) Unit tests for the Slack notifier and policy gate approval path
   - SlackClient: verify the outbound `chat.postMessage` payload contains the correct `action_id` values, button values (ticket ID), tool name, and session ID in the Block Kit structure
   - SlackClient: verify the `Authorization: Bearer` header is set from the injected bot token
   - PolicyGateHandler (mock bridge): verify that an approved decision causes the handler to return `(nil, nil)`

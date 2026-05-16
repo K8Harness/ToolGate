@@ -7,11 +7,12 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	corepolicy "github.com/K8Harness/ToolGate/core/policy"
 	"github.com/K8Harness/ToolGate/core/mcp"
+	corepolicy "github.com/K8Harness/ToolGate/core/policy"
 )
 
 func TestPolicyGateHandlerPassthroughSkipsAuditAndBudget(t *testing.T) {
@@ -486,6 +487,23 @@ func (m *mockSlackNotifier) SendApprovalRequest(_ context.Context, _ string, _ T
 	return m.err
 }
 
+type policyGateLockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *policyGateLockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *policyGateLockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 func TestPolicyGateHandlerApprovalHoldApprovedReturnsContinue(t *testing.T) {
 	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: true, TicketID: "ticket-1"}}
 	notifier := newMockSlackNotifier(nil)
@@ -605,6 +623,7 @@ func TestPolicyGateHandlerApprovalHoldTimeoutReturnsTimeoutError(t *testing.T) {
 
 func TestPolicyGateHandlerApprovalHoldNotifierErrorDoesNotBlockBridge(t *testing.T) {
 	// Even if notifier returns an error, WaitForDecision must still be called.
+	var buf policyGateLockedBuffer
 	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: true, TicketID: "ticket-notifier-err"}}
 	notifier := newMockSlackNotifier(errors.New("slack down"))
 	handler := newPolicyGateHandler(
@@ -615,7 +634,7 @@ func TestPolicyGateHandlerApprovalHoldNotifierErrorDoesNotBlockBridge(t *testing
 		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionApprovalRequired}},
 		bridge,
 		notifier,
-		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		slog.New(slog.NewTextHandler(&buf, nil)),
 		nowStub(time.Unix(0, 0)),
 	)
 
@@ -634,5 +653,15 @@ func TestPolicyGateHandlerApprovalHoldNotifierErrorDoesNotBlockBridge(t *testing
 	case <-notifier.sendCalled:
 	case <-time.After(time.Second):
 		t.Fatal("notifier.SendApprovalRequest was not called within 1 second")
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		if strings.Contains(buf.String(), "slack notification failed") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("logs = %q, want slack notification failure entry", buf.String())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
