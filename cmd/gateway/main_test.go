@@ -250,6 +250,60 @@ rules:
 	}
 }
 
+func TestBuildGatewayServerRegistersSlackWebhookRoute(t *testing.T) {
+	ctx := context.Background()
+	dsn := testSchemaDSN(t, testPostgresDSN(t))
+
+	policyPath := writePolicyFile(t, `
+defaultAction: allow
+budgets:
+  maxToolCallsPerTurn: 3
+`)
+
+	config := &Config{
+		ListenPort:         8080,
+		PolicyFilePath:     policyPath,
+		PostgresDSN:        dsn,
+		RedisDSN:           testRedisDSN(t),
+		UpstreamMCPURL:     "http://example.invalid",
+		TurnIDHeader:       defaultTurnIDHeader,
+		UpstreamTimeout:    time.Second,
+		SessionTTL:         time.Minute,
+		SessionLockTTL:     time.Minute,
+		LockAcquireTimeout: 250 * time.Millisecond,
+		SlackBotToken:      "xoxb-test-token",
+		SlackSigningSecret: "test-signing-secret",
+		SlackChannel:       "#approvals",
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	server, cleanup, err := buildGatewayServer(ctx, config, logger)
+	if err != nil {
+		t.Fatalf("buildGatewayServer() error = %v, want nil", err)
+	}
+	t.Cleanup(cleanup)
+
+	ts := httptest.NewServer(server)
+	defer ts.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/slack/actions", strings.NewReader("payload=%7B%7D"))
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /slack/actions status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+
+	resp, err := http.Post(ts.URL+"/slack/actions", "application/x-www-form-urlencoded", strings.NewReader("payload=%7B%7D"))
+	if err != nil {
+		t.Fatalf("POST /slack/actions via httptest server: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("network POST /slack/actions status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
 func TestBuildGatewayServerWiresConcurrencyGuard(t *testing.T) {
 	ctx := context.Background()
 	dsn := testSchemaDSN(t, testPostgresDSN(t))

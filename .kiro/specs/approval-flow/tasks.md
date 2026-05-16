@@ -58,7 +58,7 @@
   - A previously immediate-return path now holds the HTTP connection open: confirmed by the handler not returning until `WaitForDecision` resolves
   - _Requirements: 1.1, 1.3, 1.4, 1.5, 2.3, 5.1, 5.4_
 
-- [ ] 3.2 Wire all approval-flow components into the gateway binary and register the webhook endpoint
+- [x] 3.2 Wire all approval-flow components into the gateway binary and register the webhook endpoint
   - Construct `SlackClient`, `RedisApprovalBridge`, and `SlackWebhookHandler` in the gateway startup sequence using the Slack config fields
   - Inject `ApprovalBridge` and `SlackNotifier` into `PolicyGateHandler` during pipeline construction
   - Register `POST /slack/actions` on the HTTP server's mux, routing to the `SlackWebhookHandler`
