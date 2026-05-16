@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const defaultSuitePath = "evalsuite/default.yaml"
@@ -18,6 +20,14 @@ type stackOrchestrator interface {
 	Down(ctx context.Context) error
 }
 
+type dbCloser interface {
+	Close()
+}
+
+type caseExecutor interface {
+	Run(ctx context.Context, c EvalCase) ([]TraceRow, error)
+}
+
 type evalRunnerDeps struct {
 	args       []string
 	stdout     io.Writer
@@ -26,6 +36,11 @@ type evalRunnerDeps struct {
 	loadConfig func() (*Config, error)
 	loadSuite  func(path string) (*EvalSuite, error)
 	newOrch    func(cfg *Config) stackOrchestrator
+	openDB     func(ctx context.Context, dsn string) (dbCloser, error)
+	newRunner  func(cfg *Config, db dbCloser) caseExecutor
+	evaluate   func(c EvalCase, trace []TraceRow) CaseResult
+	report     func(results []CaseResult) string
+	exitCode   func(results []CaseResult) int
 }
 
 func main() {
@@ -39,20 +54,48 @@ func main() {
 		newOrch: func(cfg *Config) stackOrchestrator {
 			return NewOrchestrator(cfg.ComposeFile, defaultComposeProjectName)
 		},
+		openDB: openPostgresPool,
+		newRunner: func(cfg *Config, db dbCloser) caseExecutor {
+			pool, _ := db.(*pgxpool.Pool)
+			return NewCaseRunner(cfg.AgentURL, pool)
+		},
+		evaluate: Evaluate,
+		report:   GenerateReport,
+		exitCode: ExitCode,
 	}))
 }
 
 func run(deps evalRunnerDeps) (exitCode int) {
 	exitCode = 0
+	ctx := context.Background()
 
-	if _, err := deps.lookPath("docker"); err != nil {
-		fmt.Fprintln(deps.stderr, "docker not found in PATH")
-		return 1
+	if deps.openDB == nil {
+		deps.openDB = openPostgresPool
+	}
+	if deps.newRunner == nil {
+		deps.newRunner = func(cfg *Config, db dbCloser) caseExecutor {
+			pool, _ := db.(*pgxpool.Pool)
+			return NewCaseRunner(cfg.AgentURL, pool)
+		}
+	}
+	if deps.evaluate == nil {
+		deps.evaluate = Evaluate
+	}
+	if deps.report == nil {
+		deps.report = GenerateReport
+	}
+	if deps.exitCode == nil {
+		deps.exitCode = ExitCode
 	}
 
 	cfg, err := deps.loadConfig()
 	if err != nil {
 		fmt.Fprintln(deps.stderr, err.Error())
+		return 1
+	}
+
+	if _, err := deps.lookPath("docker"); err != nil {
+		fmt.Fprintln(deps.stderr, "docker not found in PATH")
 		return 1
 	}
 
@@ -62,19 +105,20 @@ func run(deps evalRunnerDeps) (exitCode int) {
 		return 2
 	}
 
-	if _, err := deps.loadSuite(suitePath); err != nil {
+	suite, err := deps.loadSuite(suitePath)
+	if err != nil {
 		fmt.Fprintln(deps.stderr, formatSuiteLoadError(suitePath, err))
 		return 1
 	}
 
 	orchestrator := deps.newOrch(cfg)
-	if err := orchestrator.Up(context.Background()); err != nil {
+	if err := orchestrator.Up(ctx); err != nil {
 		fmt.Fprintln(deps.stderr, err.Error())
 		return 1
 	}
 
 	defer func() {
-		if err := orchestrator.Down(context.Background()); err != nil {
+		if err := orchestrator.Down(ctx); err != nil {
 			fmt.Fprintln(deps.stderr, err.Error())
 			if exitCode == 0 {
 				exitCode = 1
@@ -82,8 +126,54 @@ func run(deps evalRunnerDeps) (exitCode int) {
 		}
 	}()
 
-	fmt.Fprintf(deps.stdout, "Eval suite %q loaded; stack lifecycle complete, case execution/report wiring is deferred to task 8.1.\n", suitePath)
-	return exitCode
+	db, err := deps.openDB(ctx, cfg.PostgresDSN)
+	if err != nil {
+		fmt.Fprintln(deps.stderr, err.Error())
+		return 1
+	}
+	if db != nil {
+		defer db.Close()
+	}
+
+	runner := deps.newRunner(cfg, db)
+	results := make([]CaseResult, 0, len(suite.Cases))
+	for _, testCase := range suite.Cases {
+		fmt.Fprintf(deps.stdout, "[RUN] %s\n", testCase.Name)
+
+		trace, err := runner.Run(ctx, testCase)
+		result := CaseResult{Name: testCase.Name}
+		if err != nil {
+			result.Failures = []CheckFailure{{
+				Check:    "run",
+				Expected: "case completes successfully",
+				Observed: err.Error(),
+			}}
+		} else {
+			result = deps.evaluate(testCase, trace)
+		}
+
+		if result.Passed {
+			fmt.Fprintf(deps.stdout, "[PASS] %s\n", result.Name)
+		} else {
+			fmt.Fprintf(deps.stdout, "[FAIL] %s\n", result.Name)
+		}
+		results = append(results, result)
+	}
+
+	fmt.Fprintln(deps.stdout, deps.report(results))
+	return deps.exitCode(results)
+}
+
+func openPostgresPool(ctx context.Context, dsn string) (dbCloser, error) {
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		return nil, err
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return pool, nil
 }
 
 func resolveSuitePath(args []string) (string, error) {
