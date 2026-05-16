@@ -12,7 +12,7 @@ env:
 jobs:
   # ── Gateway (Go) ─────────────────────────────────────────────────────────────
   gateway:
-    name: Gateway · Go ${{ env.GO_VERSION }}
+    name: Gateway · Go 1.22
     runs-on: ubuntu-latest
 
     steps:
@@ -25,6 +25,14 @@ jobs:
 
       - name: Vet
         run: go vet ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+      - name: Build
+        run: go build ./...
 
       - name: Test
         run: go test -race -coverprofile=coverage.out ./...
