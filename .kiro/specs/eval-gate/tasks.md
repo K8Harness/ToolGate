@@ -96,7 +96,7 @@
   - _Boundary: Fake Slack Server_
 
 - [ ] 5. Mock Slack service and Python demo agent
-- [ ] 5.1 (P) Build the mock Slack auto-approver service
+- [x] 5.1 (P) Build the mock Slack auto-approver service
   - Create `examples/mock-slack/main.go` exposing `POST /api/chat.postMessage`
   - Parse the incoming Block Kit notification JSON: traverse `blocks` array to find the `actions` block; extract the first button element's `value` field as `ticket_id`
   - Wait 50ms, then construct a Slack interactive payload: `type: block_actions`, `actions[0].action_id: "approval_approve"`, `actions[0].value: <ticket_id>`
