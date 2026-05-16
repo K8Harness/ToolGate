@@ -165,6 +165,6 @@ func sendApproveAction(ticketID string) {
 		log.Printf("mock-slack: approve POST error: %v", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	log.Printf("mock-slack: gateway /slack/actions response: %d", resp.StatusCode)
 }

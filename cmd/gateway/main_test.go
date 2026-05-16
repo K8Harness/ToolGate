@@ -306,7 +306,7 @@ budgets:
 	if err != nil {
 		t.Fatalf("POST /slack/actions via httptest server: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("network POST /slack/actions status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}

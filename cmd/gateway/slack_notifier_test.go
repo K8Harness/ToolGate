@@ -13,12 +13,6 @@ import (
 
 // --- Helpers ---
 
-// slackBlockPayload mirrors the minimal JSON structure we send to Slack chat.postMessage.
-type slackBlockPayload struct {
-	Channel string        `json:"channel"`
-	Blocks  []interface{} `json:"blocks"`
-}
-
 // capturedSlackRequest holds the decoded request captured by the test server.
 type capturedSlackRequest struct {
 	authHeader string
@@ -35,7 +29,7 @@ func newSlackTestServer(t *testing.T, statusCode int) (*httptest.Server, *captur
 		w.WriteHeader(statusCode)
 		if statusCode == http.StatusOK {
 			// Minimal Slack API success response
-			w.Write([]byte(`{"ok":true}`))
+			_, _ = w.Write([]byte(`{"ok":true}`))
 		}
 	}))
 	t.Cleanup(srv.Close)

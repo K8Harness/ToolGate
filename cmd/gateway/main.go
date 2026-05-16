@@ -66,12 +66,12 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 
 	pool, err := NewDBPool(ctx, config.PostgresDSN)
 	if err != nil {
-		redisClient.Close()
+		_ = redisClient.Close()
 		return nil, nil, fmt.Errorf("postgres initialization failed: %w", err)
 	}
 
 	cleanup := func() {
-		redisClient.Close()
+		_ = redisClient.Close()
 		pool.Close()
 	}
 

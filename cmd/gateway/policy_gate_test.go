@@ -329,15 +329,6 @@ func testPolicyGateToolsCallRequest() *mcp.JSONRPCRequest {
 	}
 }
 
-func decodePolicyGateResult(t *testing.T, raw json.RawMessage) map[string]any {
-	t.Helper()
-	var result map[string]any
-	if err := json.Unmarshal(raw, &result); err != nil {
-		t.Fatalf("json.Unmarshal(result) error = %v, want nil", err)
-	}
-	return result
-}
-
 type policyGateAuditStub struct {
 	records []AuditRecord
 }
@@ -772,10 +763,7 @@ func TestPolicyGateHandlerApprovalHoldNotifierErrorDoesNotBlockBridge(t *testing
 		t.Fatal("notifier.SendApprovalRequest was not called within 1 second")
 	}
 	deadline := time.Now().Add(time.Second)
-	for {
-		if strings.Contains(buf.String(), "slack notification failed") {
-			break
-		}
+	for !strings.Contains(buf.String(), "slack notification failed") {
 		if time.Now().After(deadline) {
 			t.Fatalf("logs = %q, want slack notification failure entry", buf.String())
 		}

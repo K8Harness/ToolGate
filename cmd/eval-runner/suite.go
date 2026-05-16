@@ -19,7 +19,7 @@ func LoadSuite(path string) (*EvalSuite, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var suite EvalSuite
 	if err := yaml.NewDecoder(file).Decode(&suite); err != nil {

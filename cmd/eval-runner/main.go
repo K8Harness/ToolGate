@@ -90,36 +90,36 @@ func run(deps evalRunnerDeps) (exitCode int) {
 
 	cfg, err := deps.loadConfig()
 	if err != nil {
-		fmt.Fprintln(deps.stderr, err.Error())
+		_, _ = fmt.Fprintln(deps.stderr, err.Error())
 		return 1
 	}
 
 	if _, err := deps.lookPath("docker"); err != nil {
-		fmt.Fprintln(deps.stderr, "docker not found in PATH")
+		_, _ = fmt.Fprintln(deps.stderr, "docker not found in PATH")
 		return 1
 	}
 
 	suitePath, err := resolveSuitePath(deps.args)
 	if err != nil {
-		fmt.Fprintln(deps.stderr, err.Error())
+		_, _ = fmt.Fprintln(deps.stderr, err.Error())
 		return 2
 	}
 
 	suite, err := deps.loadSuite(suitePath)
 	if err != nil {
-		fmt.Fprintln(deps.stderr, formatSuiteLoadError(suitePath, err))
+		_, _ = fmt.Fprintln(deps.stderr, formatSuiteLoadError(suitePath, err))
 		return 1
 	}
 
 	orchestrator := deps.newOrch(cfg)
 	if err := orchestrator.Up(ctx); err != nil {
-		fmt.Fprintln(deps.stderr, err.Error())
+		_, _ = fmt.Fprintln(deps.stderr, err.Error())
 		return 1
 	}
 
 	defer func() {
 		if err := orchestrator.Down(ctx); err != nil {
-			fmt.Fprintln(deps.stderr, err.Error())
+			_, _ = fmt.Fprintln(deps.stderr, err.Error())
 			if exitCode == 0 {
 				exitCode = 1
 			}
@@ -128,7 +128,7 @@ func run(deps evalRunnerDeps) (exitCode int) {
 
 	db, err := deps.openDB(ctx, cfg.PostgresDSN)
 	if err != nil {
-		fmt.Fprintln(deps.stderr, err.Error())
+		_, _ = fmt.Fprintln(deps.stderr, err.Error())
 		return 1
 	}
 	if db != nil {
@@ -138,7 +138,7 @@ func run(deps evalRunnerDeps) (exitCode int) {
 	runner := deps.newRunner(cfg, db)
 	results := make([]CaseResult, 0, len(suite.Cases))
 	for _, testCase := range suite.Cases {
-		fmt.Fprintf(deps.stdout, "[RUN] %s\n", testCase.Name)
+		_, _ = fmt.Fprintf(deps.stdout, "[RUN] %s\n", testCase.Name)
 
 		trace, err := runner.Run(ctx, testCase)
 		result := CaseResult{Name: testCase.Name}
@@ -153,14 +153,14 @@ func run(deps evalRunnerDeps) (exitCode int) {
 		}
 
 		if result.Passed {
-			fmt.Fprintf(deps.stdout, "[PASS] %s\n", result.Name)
+			_, _ = fmt.Fprintf(deps.stdout, "[PASS] %s\n", result.Name)
 		} else {
-			fmt.Fprintf(deps.stdout, "[FAIL] %s\n", result.Name)
+			_, _ = fmt.Fprintf(deps.stdout, "[FAIL] %s\n", result.Name)
 		}
 		results = append(results, result)
 	}
 
-	fmt.Fprintln(deps.stdout, deps.report(results))
+	_, _ = fmt.Fprintln(deps.stdout, deps.report(results))
 	return deps.exitCode(results)
 }
 

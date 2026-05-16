@@ -47,7 +47,7 @@ func inspectHandler(w http.ResponseWriter, r *http.Request) {
 	copy(snapshot, calls)
 	mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"calls": snapshot})
+	_ = json.NewEncoder(w).Encode(map[string]any{"calls": snapshot})
 }
 
 func main() {
