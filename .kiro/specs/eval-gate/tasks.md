@@ -145,7 +145,7 @@
   - _Requirements: 2.1, 2.2, 2.5, 7.5, 10.1, 10.4_
   - _Boundary: Docker Compose stack_
 
-- [ ] 7.2 Create `evalsuite/default.yaml` with 4 test cases
+- [x] 7.2 Create `evalsuite/default.yaml` with 4 test cases
   - Write the default EvalSuite YAML with exactly these 4 cases using the schema defined in `types.go`:
     - `small-refund-allow`: input=`small-refund`, mustInclude=[refund_small], policyOutcome=allow
     - `large-refund-approval`: input=`large-refund`, mustInclude=[refund_large], policyOutcome=approvalRequired
