@@ -55,5 +55,5 @@ Postgres schema introduced in this slice: `audit_log` table. Connection via `pgx
 
 - Policy evaluation must complete before the upstream forward happens (synchronous in critical path)
 - Audit writes may be async (non-blocking) to meet the <10ms overhead target
-- YAML policy schema must match the format specified in `AgentPlane_revised (1).md` (rules, budgets, defaultAction: deny)
+- YAML policy schema must match the format specified in `ToolGate_revised (1).md` (rules, budgets, defaultAction: deny)
 - No Rego in v0 — pure Go predicate evaluation against the YAML AST

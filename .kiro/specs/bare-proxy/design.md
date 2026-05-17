@@ -2,11 +2,11 @@
 
 ## Overview
 
-The bare-proxy is the first vertical slice of the AgentPlane v0 MCP gateway. It implements a transparent HTTP proxy that accepts MCP tool calls from agent SDKs, enriches each request with session and turn metadata, and forwards them to a configurable upstream MCP server — establishing the extensible pipeline that all subsequent governance slices (policy-gate, session-mgmt, approval-flow) register handlers into.
+The bare-proxy is the first vertical slice of the ToolGate v0 MCP gateway. It implements a transparent HTTP proxy that accepts MCP tool calls from agent SDKs, enriches each request with session and turn metadata, and forwards them to a configurable upstream MCP server — establishing the extensible pipeline that all subsequent governance slices (policy-gate, session-mgmt, approval-flow) register handlers into.
 
 The gateway targets the current MCP **Streamable HTTP** transport (spec 2025-03-26 / 2025-06-18): `POST /mcp` for client→server requests, `GET /mcp` for server-initiated SSE notifications. The legacy `GET /sse` transport referenced in the discovery brief is deprecated per the MCP spec and is not implemented. See `research.md` for the transport decision rationale.
 
-**Users**: AI platform developers wiring agent SDKs through AgentPlane. In v0, the primary consumer is the Python demo agent in the eval-gate slice.
+**Users**: AI platform developers wiring agent SDKs through ToolGate. In v0, the primary consumer is the Python demo agent in the eval-gate slice.
 
 ### Goals
 
@@ -113,7 +113,7 @@ cmd/gateway (server, session, injector, logger, config, main)
 ## File Structure Plan
 
 ```
-agentplane/
+toolgate/
 ├── cmd/
 │   └── gateway/
 │       ├── main.go         # Entry point: load Config, build Pipeline, start Server

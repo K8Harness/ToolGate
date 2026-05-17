@@ -6,7 +6,7 @@ AI agents using the MCP SDK send `tools/call` requests over SSE. There is no int
 
 ## Current State
 
-No code exists. This is a greenfield Go binary. The design documents (`AgentPlane_revised (1).md`, `v0.md`) specify the protocol and component responsibilities.
+No code exists. This is a greenfield Go binary. The design documents (`ToolGate_revised (1).md`, `v0.md`) specify the protocol and component responsibilities.
 
 ## Desired Outcome
 

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-AgentPlane's bare-proxy is the first vertical slice of the v0 MCP gateway. It gives AI platform teams a transparent Go proxy that intercepts MCP SDK tool calls over SSE, enriches each call with session and turn metadata, and forwards it to a configurable upstream MCP server — providing the extensible forwarding pipeline that all subsequent governance slices (policy, locking, approval) will build upon.
+ToolGate's bare-proxy is the first vertical slice of the v0 MCP gateway. It gives AI platform teams a transparent Go proxy that intercepts MCP SDK tool calls over SSE, enriches each call with session and turn metadata, and forwards it to a configurable upstream MCP server — providing the extensible forwarding pipeline that all subsequent governance slices (policy, locking, approval) will build upon.
 
 ## Boundary Context
 

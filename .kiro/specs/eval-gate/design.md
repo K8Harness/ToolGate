@@ -2,7 +2,7 @@
 
 ## Overview
 
-The eval-gate feature delivers the automated deployment gate and complete demo stack for AgentPlane v0. It introduces an eval runner CLI binary (`cmd/eval-runner`) that orchestrates a Docker Compose stack, submits EvalSuite YAML test cases to a Python demo agent, captures the gateway's policy decision trace from the Postgres `audit_log`, and emits a Markdown pass/fail report. A non-zero exit code on any case failure makes the runner usable as a CI gate without additional integration.
+The eval-gate feature delivers the automated deployment gate and complete demo stack for ToolGate v0. It introduces an eval runner CLI binary (`cmd/eval-runner`) that orchestrates a Docker Compose stack, submits EvalSuite YAML test cases to a Python demo agent, captures the gateway's policy decision trace from the Postgres `audit_log`, and emits a Markdown pass/fail report. A non-zero exit code on any case failure makes the runner usable as a CI gate without additional integration.
 
 The feature also ships all v0 demo infrastructure: fake MCP servers for Stripe, Zendesk, and Slack; a mock Slack service that enables the approval scenario without a real Slack account; a Python support-refund demo agent; and a `make demo` Makefile target. Running `make demo` from a fresh git clone exercises all four gateway scenarios — auto-approve, human-approval, policy-deny, and PII-redaction — end-to-end against the real gateway binary. The eval-gate also extends the existing policy gate with an additive `redact` action that masks specified argument fields before auditing and forwarding.
 

@@ -133,7 +133,7 @@ cmd/gateway  (PolicyGateHandler, BudgetTracker, AuditWriter, TicketStore, DB poo
 ## File Structure Plan
 
 ```
-agentplane/
+toolgate/
 ├── core/
 │   ├── mcp/
 │   │   └── types.go           # MODIFIED: add CodePolicyDenied = -32001

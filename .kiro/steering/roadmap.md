@@ -2,7 +2,7 @@
 
 ## Overview
 
-AgentPlane is a two-layer control plane for AI agents in production: an MCP policy gateway that enforces per-call rules at runtime, and an eval-gated deployment gate that blocks promotion of a new agent version until a user-defined eval suite passes a numeric threshold.
+ToolGate is a two-layer control plane for AI agents in production: an MCP policy gateway that enforces per-call rules at runtime, and an eval-gated deployment gate that blocks promotion of a new agent version until a user-defined eval suite passes a numeric threshold.
 
 v0 targets a single runnable demo on Docker Compose — no Kubernetes, no Rego, no dashboard. The goal is a `make demo` that shows four scenarios end-to-end: a refund approved automatically with a verification token, a large refund routed to Slack for human approval, a delete call denied by policy, and a Slack message with PII redacted. All traces visible in OTel (Jaeger/Tempo).
 

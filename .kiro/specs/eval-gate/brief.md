@@ -65,6 +65,6 @@ Python demo agent: minimal LangGraph or CrewAI agent wired to the gateway's SSE 
 
 - `make demo` must work from a fresh `git clone` with only Docker and Go installed (no pre-existing Slack token required for the deny/allow/redact cases; Slack approval case requires a real or mocked webhook)
 - Fake MCP servers must speak the MCP JSON-RPC-over-SSE protocol — no custom stubs
-- EvalSuite YAML schema must match the format specified in `AgentPlane_revised (1).md`
+- EvalSuite YAML schema must match the format specified in `ToolGate_revised (1).md`
 - Pass/fail report must be Markdown (viewable in CI artifact or terminal)
 - Non-zero exit code on any case failure (enables CI gate integration)

@@ -153,7 +153,7 @@
   - _Requirements: 1.1, 1.2, 2.1, 2.2, 2.3, 3.1, 3.2, 3.3, 3.4, 4.1, 4.4, 4.5, 6.1, 6.3_
 
 - [x]* 6.2 E2E test — live binary with real HTTP client
-  - Build the gateway binary with `go build -o /tmp/agentplane-gateway ./cmd/gateway` and start it as a subprocess pointing at a local fake upstream
+  - Build the gateway binary with `go build -o /tmp/toolgate-gateway ./cmd/gateway` and start it as a subprocess pointing at a local fake upstream
   - Use `net/http` (not `httptest`) to send a real `POST /mcp {initialize}` request and assert a `200` response containing a `Mcp-Session-Id` header
   - Send `DELETE /mcp` with the session ID; assert `200 OK`; wait for the subprocess to exit cleanly after `SIGTERM`
   - Confirm: the binary binds port 8080, responds correctly to a real HTTP client, and exits cleanly; the response body is valid JSON with `jsonrpc: "2.0"`

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The eval-gate feature provides an automated deployment gate for the AgentPlane gateway. An eval runner CLI binary orchestrates the Docker Compose stack, runs an EvalSuite of YAML-defined test cases against the fully assembled gateway and a Python demo agent, captures the gateway's policy decision trace from the Postgres audit log, and compares each observed trace against expected results. The runner outputs a Markdown pass/fail report and exits non-zero if any case fails, blocking promotion of a broken agent version. The feature concludes the v0 demo: `make demo` exercises all four gateway scenarios end-to-end.
+The eval-gate feature provides an automated deployment gate for the ToolGate gateway. An eval runner CLI binary orchestrates the Docker Compose stack, runs an EvalSuite of YAML-defined test cases against the fully assembled gateway and a Python demo agent, captures the gateway's policy decision trace from the Postgres audit log, and compares each observed trace against expected results. The runner outputs a Markdown pass/fail report and exits non-zero if any case fails, blocking promotion of a broken agent version. The feature concludes the v0 demo: `make demo` exercises all four gateway scenarios end-to-end.
 
 ## Boundary Context
 
