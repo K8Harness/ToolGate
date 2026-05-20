@@ -107,5 +107,30 @@ services:
       retries: 12
       start_period: 15s
 
+  demo-webapp:
+    build:
+      context: ./localstripe_demo
+      dockerfile_inline: |
+        FROM python:3.12-alpine
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e ".[webapp]"
+        ENTRYPOINT ["demo-webapp"]
+    depends_on:
+      localstripe-mcp:
+        condition: service_healthy
+      localstripe:
+        condition: service_healthy
+    environment:
+      MCP_URL: http://localstripe-mcp:8421/mcp
+      LOCALSTRIPE_URL: http://localstripe:8420
+      LOCALSTRIPE_API_KEY: sk_test_12345
+      WEBAPP_HOST: "0.0.0.0"
+      WEBAPP_PORT: "8422"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+    ports:
+      - "18422:8422"
+
 volumes:
   postgres-data:
