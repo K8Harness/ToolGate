@@ -10,12 +10,15 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
 type UpstreamForwarder struct {
-	upstreamURL string
-	httpClient  *http.Client
+	upstreamURL       string
+	httpClient        *http.Client
+	mu                sync.Mutex
+	upstreamSessionID string
 }
 
 type upstreamError struct {
@@ -59,11 +62,26 @@ func (f *UpstreamForwarder) Handle(ctx context.Context, req *JSONRPCRequest) (*J
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json, text/event-stream")
 
+	f.mu.Lock()
+	sessionID := f.upstreamSessionID
+	f.mu.Unlock()
+	if sessionID != "" {
+		httpReq.Header.Set("Mcp-Session-Id", sessionID)
+	}
+
 	httpResp, err := f.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, wrapUpstreamError(upstreamFailureMessage(err), err)
 	}
 	defer func() { _ = httpResp.Body.Close() }()
+
+	if req.Method == "initialize" {
+		if id := httpResp.Header.Get("Mcp-Session-Id"); id != "" {
+			f.mu.Lock()
+			f.upstreamSessionID = id
+			f.mu.Unlock()
+		}
+	}
 
 	if httpResp.StatusCode != http.StatusOK {
 		return nil, wrapUpstreamError(fmt.Sprintf("upstream returned status %d", httpResp.StatusCode), nil)
