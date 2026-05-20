@@ -256,6 +256,25 @@ services:
     networks:
       - eval-gate
 
+  localstripe-refund-agent:
+    build:
+      context: ../localstripe_demo
+      dockerfile_inline: |
+        FROM python:3.12-alpine
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e ".[agent]"
+        ENTRYPOINT ["localstripe-refund-agent"]
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      MCP_URL: http://gateway:8080/mcp
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+    networks:
+      - eval-gate
+
 networks:
   eval-gate:
     driver: bridge
