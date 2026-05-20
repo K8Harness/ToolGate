@@ -9,6 +9,16 @@ rules:
     action: redact
     redactFields:
       - message
+  - tool: lookup_charge
+    action: allow
+  - tool: lookup_payment_intent
+    action: allow
+  - tool: list_recent_charges
+    action: allow
+  - tool: list_refunds_for_charge
+    action: allow
+  - tool: create_refund
+    action: approvalRequired
 budgets:
   maxToolCallsPerTurn: 5
 defaultAction: deny
