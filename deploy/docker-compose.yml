@@ -121,6 +121,58 @@ services:
     networks:
       - eval-gate
 
+  localstripe:
+    build:
+      context: ../localstripe_demo
+      dockerfile_inline: |
+        FROM python:3.12-alpine
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e .
+        ENTRYPOINT ["localstripe"]
+    expose:
+      - "8420"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null --header='Authorization: Bearer sk_test_12345' http://127.0.0.1:8420/v1/charges"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - eval-gate
+
+  localstripe-mcp:
+    build:
+      context: ../localstripe_demo
+      dockerfile_inline: |
+        FROM python:3.12-alpine
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e ".[mcp]"
+        ENTRYPOINT ["localstripe-mcp"]
+    depends_on:
+      localstripe:
+        condition: service_healthy
+    environment:
+      LOCALSTRIPE_URL: http://localstripe:8420
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8421"
+      MCP_TRANSPORT: streamable-http
+    expose:
+      - "8421"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null --header='Content-Type: application/json' --header='Accept: application/json, text/event-stream' --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0.0\"}}}' http://127.0.0.1:8421/mcp",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      - eval-gate
+
   fake-zendesk:
     build:
       context: ..
