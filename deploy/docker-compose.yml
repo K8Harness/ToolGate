@@ -20,7 +20,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      fake-upstream:
+      localstripe-mcp:
         condition: service_healthy
     environment:
       GATEWAY_PORT: "8080"
@@ -33,7 +33,7 @@ services:
       SLACK_API_BASE_URL: http://mock-slack:8090/api
       SESSION_LOCK_TTL: "3s"
       LOCK_ACQUIRE_TIMEOUT: "5s"
-      UPSTREAM_MCP_URL: http://fake-upstream:8081/mcp
+      UPSTREAM_MCP_URL: http://localstripe-mcp:8421/mcp
     healthcheck:
       test:
         [
