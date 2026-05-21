@@ -50,14 +50,31 @@ func NewUpstreamForwarder(upstreamURL string, timeout time.Duration) *UpstreamFo
 }
 
 func (f *UpstreamForwarder) Handle(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, error) {
+	resp, stale, err := f.doRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	// Upstream session was lost (upstream restart); re-initialize and retry once.
+	if stale {
+		if reinitErr := f.revalidateSession(ctx, req); reinitErr != nil {
+			return nil, reinitErr
+		}
+		resp, _, err = f.doRequest(ctx, req)
+	}
+	return resp, err
+}
+
+// doRequest sends req to the upstream. It returns stale=true when the upstream
+// rejected the request with 404/400 because our cached session is no longer valid.
+func (f *UpstreamForwarder) doRequest(ctx context.Context, req *JSONRPCRequest) (*JSONRPCResponse, bool, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, wrapUpstreamError("encode upstream request", err)
+		return nil, false, wrapUpstreamError("encode upstream request", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, f.upstreamURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, wrapUpstreamError("build upstream request", err)
+		return nil, false, wrapUpstreamError("build upstream request", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json, text/event-stream")
@@ -71,7 +88,7 @@ func (f *UpstreamForwarder) Handle(ctx context.Context, req *JSONRPCRequest) (*J
 
 	httpResp, err := f.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, wrapUpstreamError(upstreamFailureMessage(err), err)
+		return nil, false, wrapUpstreamError(upstreamFailureMessage(err), err)
 	}
 	defer func() { _ = httpResp.Body.Close() }()
 
@@ -83,15 +100,38 @@ func (f *UpstreamForwarder) Handle(ctx context.Context, req *JSONRPCRequest) (*J
 		}
 	}
 
+	// Stale session: upstream restarted and dropped our session.
+	if sessionID != "" && req.Method != "initialize" &&
+		(httpResp.StatusCode == http.StatusNotFound || httpResp.StatusCode == http.StatusBadRequest) {
+		f.mu.Lock()
+		f.upstreamSessionID = ""
+		f.mu.Unlock()
+		return nil, true, nil
+	}
+
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, wrapUpstreamError(fmt.Sprintf("upstream returned status %d", httpResp.StatusCode), nil)
+		return nil, false, wrapUpstreamError(fmt.Sprintf("upstream returned status %d", httpResp.StatusCode), nil)
 	}
 
 	resp, err := decodeUpstreamResponse(httpResp)
 	if err != nil {
-		return nil, wrapUpstreamError("decode upstream response", err)
+		return nil, false, wrapUpstreamError("decode upstream response", err)
 	}
-	return resp, nil
+	return resp, false, nil
+}
+
+// revalidateSession sends a minimal initialize to the upstream to establish a
+// fresh session, discarding the result (the real initialize response was already
+// sent to the client from the first connect).
+func (f *UpstreamForwarder) revalidateSession(ctx context.Context, original *JSONRPCRequest) error {
+	initReq := &JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      original.ID,
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"gateway","version":"1.0.0"}}`),
+	}
+	_, _, err := f.doRequest(ctx, initReq)
+	return err
 }
 
 func decodeUpstreamResponse(resp *http.Response) (*JSONRPCResponse, error) {
