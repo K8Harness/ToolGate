@@ -22,13 +22,13 @@ type TraceRow struct {
 }
 
 type CheckFailure struct {
-	Check    string
-	Expected string
-	Observed string
+	Check    string `json:"check"`
+	Expected string `json:"expected"`
+	Observed string `json:"observed"`
 }
 
 type CaseResult struct {
-	Name     string
-	Passed   bool
-	Failures []CheckFailure
+	Name     string         `json:"name"`
+	Passed   bool           `json:"passed"`
+	Failures []CheckFailure `json:"failures"`
 }

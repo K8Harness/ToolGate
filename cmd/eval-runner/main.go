@@ -44,8 +44,22 @@ type evalRunnerDeps struct {
 }
 
 func main() {
+	args := os.Args[1:]
+
+	if len(args) > 0 && args[0] == "--serve" {
+		suitePath := defaultSuitePath
+		if len(args) > 1 {
+			suitePath = args[1]
+		}
+		if err := serve(suitePath); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+
 	os.Exit(run(evalRunnerDeps{
-		args:       os.Args[1:],
+		args:       args,
 		stdout:     os.Stdout,
 		stderr:     os.Stderr,
 		lookPath:   exec.LookPath,

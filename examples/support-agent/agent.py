@@ -8,10 +8,10 @@ app = Flask(__name__)
 GATEWAY_URL = os.environ["GATEWAY_URL"]
 
 DISPATCH = {
-    "small-refund":      ("refund_small",       {"amount": 50, "customer_id": "cust_001"}),
-    "large-refund":      ("refund_large",        {"amount": 12000, "customer_id": "cust_002"}),
-    "delete-customer":   ("delete_record",       {"customer_id": "cust_003"}),
-    "slack-pii-message": ("send_slack_message",  {"channel": "#support", "message": "Customer SSN: 123-45-6789"}),
+    "lookup-charge":  ("list_recent_charges",  {"limit": 1}),
+    "create-refund":  ("create_refund",         {"charge_or_pi": "ch_fake_001", "reason": "requested_by_customer"}),
+    "deny-test":      ("delete_customer",       {"customer_id": "cust_001"}),
+    "pii-message":    ("send_slack_message",    {"channel": "#support", "message": "Customer SSN: 123-45-6789"}),
 }
 
 
