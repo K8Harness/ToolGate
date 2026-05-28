@@ -43,10 +43,11 @@ func LoadSuiteFromReader(r io.Reader) (*EvalSuite, error) {
 		if evalCase.Input == "" {
 			return nil, fmt.Errorf("case %q: missing required field %q", evalCase.Name, "input")
 		}
-		if evalCase.PolicyOutcome != "" {
-			if _, ok := allowedPolicyOutcomes[evalCase.PolicyOutcome]; !ok {
-				return nil, fmt.Errorf("case %q: invalid policyOutcome %q", evalCase.Name, evalCase.PolicyOutcome)
-			}
+		if evalCase.PolicyOutcome == "" {
+			return nil, fmt.Errorf("case %q: missing required field %q", evalCase.Name, "policyOutcome")
+		}
+		if _, ok := allowedPolicyOutcomes[evalCase.PolicyOutcome]; !ok {
+			return nil, fmt.Errorf("case %q: invalid policyOutcome %q", evalCase.Name, evalCase.PolicyOutcome)
 		}
 	}
 
