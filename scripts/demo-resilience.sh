@@ -6,9 +6,21 @@ GATEWAY_URL="http://localhost:18080"
 POSTGRES_DSN="postgres://gateway:gateway@127.0.0.1:15432/gateway?sslmode=disable"
 AGENT_URL="http://127.0.0.1:18086"
 
+# eval runner is invoked with EVAL_SKIP_COMPOSE=true so it only runs evals
+# against the already-running stack — this script owns the Docker lifecycle.
+eval_run() {
+  POSTGRES_DSN="$POSTGRES_DSN" \
+  AGENT_URL="$AGENT_URL" \
+  EVAL_SKIP_COMPOSE=true \
+  go run ./cmd/eval-runner "$@" 2>&1 || true
+}
+
 pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; exit 1; }
 section() { echo ""; echo "━━━ $1 ━━━"; }
+
+# ─── Teardown on exit ─────────────────────────────────────────────────────────
+trap '$COMPOSE down -v 2>/dev/null || true' EXIT
 
 section "Starting full stack"
 $COMPOSE up -d --wait
@@ -20,17 +32,13 @@ echo "  [FAULT] Stopping localstripe-mcp..."
 $COMPOSE stop localstripe-mcp
 
 echo "  Running eval case: mcp-server-down"
-EVAL_RESULT=$(
-  POSTGRES_DSN="$POSTGRES_DSN" \
-  AGENT_URL="$AGENT_URL" \
-  go run ./cmd/eval-runner evalsuite/resilience.yaml 2>&1 || true
-)
+EVAL_RESULT=$(eval_run evalsuite/resilience.yaml)
 
-if echo "$EVAL_RESULT" | grep -q "upstream_error\|mcp-server-down.*PASS\|PASS"; then
+if echo "$EVAL_RESULT" | grep -q "\[PASS\] mcp-server-down"; then
   pass "Gateway surfaced clean upstream_error — audit trail preserved"
 else
   echo "$EVAL_RESULT"
-  fail "Expected upstream_error in eval result"
+  fail "Expected mcp-server-down PASS"
 fi
 
 # ─── Scenario 2: Budget limiter stops retry storm ─────────────────────────────
@@ -81,22 +89,21 @@ echo "  [FAULT] Stopping mock-slack..."
 $COMPOSE stop mock-slack
 
 echo "  Running eval case: approval-timeout-slack-down (waiting up to 60s for timeout...)"
-EVAL_RESULT=$(
-  POSTGRES_DSN="$POSTGRES_DSN" \
-  AGENT_URL="$AGENT_URL" \
-  timeout 90 go run ./cmd/eval-runner evalsuite/resilience.yaml 2>&1 || true
-)
+EVAL_RESULT=$(timeout 90 bash -c '
+  POSTGRES_DSN="'"$POSTGRES_DSN"'" \
+  AGENT_URL="'"$AGENT_URL"'" \
+  EVAL_SKIP_COMPOSE=true \
+  go run ./cmd/eval-runner evalsuite/resilience.yaml 2>&1 || true
+')
 
-if echo "$EVAL_RESULT" | grep -q "approval-timeout-slack-down.*PASS\|expired\|PASS"; then
+if echo "$EVAL_RESULT" | grep -q "\[PASS\] approval-timeout-slack-down"; then
   pass "Slack outage did not hang or panic — approval expired gracefully after 15s"
 else
   echo "$EVAL_RESULT"
-  fail "Expected expired outcome in eval result"
+  fail "Expected approval-timeout-slack-down PASS"
 fi
 
-# ─── Teardown ─────────────────────────────────────────────────────────────────
-section "Teardown"
-$COMPOSE down -v
+# ─── Summary (teardown handled by trap) ───────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  3/3 resilience scenarios passed"

@@ -66,6 +66,9 @@ func main() {
 		loadConfig: LoadConfig,
 		loadSuite:  LoadSuite,
 		newOrch: func(cfg *Config) stackOrchestrator {
+			if cfg.SkipCompose {
+				return noopOrchestrator{}
+			}
 			return NewOrchestrator(cfg.ComposeFile, defaultComposeProjectName)
 		},
 		openDB: openPostgresPool,
