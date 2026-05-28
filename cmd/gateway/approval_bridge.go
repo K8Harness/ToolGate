@@ -108,6 +108,7 @@ func NewRedisApprovalBridge(
 	tickets *TicketStore,
 	locker *SessionLocker,
 	lockTTL time.Duration,
+	approvalTimeout time.Duration,
 	log *slog.Logger,
 ) *RedisApprovalBridge {
 	if log == nil {
@@ -117,7 +118,7 @@ func NewRedisApprovalBridge(
 		redis:              rdb,
 		tickets:            tickets,
 		locker:             locker,
-		timeout:            5 * time.Minute,
+		timeout:            approvalTimeout,
 		lockExtendInterval: lockTTL / 2,
 		log:                log,
 	}

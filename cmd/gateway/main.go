@@ -86,7 +86,7 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 	ticketStore := NewTicketStore(pool)
 	sessionLocker := NewSessionLocker(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)
 	slackNotifier := NewSlackClient(config.SlackBotToken, config.SlackChannel, config.SlackAPIBaseURL, logger)
-	approvalBridge := NewRedisApprovalBridge(redisClient, ticketStore, sessionLocker, config.SessionLockTTL, logger)
+	approvalBridge := NewRedisApprovalBridge(redisClient, ticketStore, sessionLocker, config.SessionLockTTL, config.ApprovalLockTTL, logger)
 	slackWebhook := NewSlackWebhookHandler(config.SlackSigningSecret, ticketStore, redisClient, logger)
 	policyGate := NewPolicyGateHandler(policy, budgetTracker, auditWriter, ticketStore, approvalBridge, slackNotifier, logger)
 	turnRWLock := NewTurnRWLock(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)

@@ -30,6 +30,7 @@ type Config struct {
 	SessionTTL         time.Duration
 	SessionLockTTL     time.Duration
 	LockAcquireTimeout time.Duration
+	ApprovalLockTTL    time.Duration // APPROVAL_LOCK_TTL (optional, default 5m)
 	SlackBotToken      string // SLACK_BOT_TOKEN     (required)
 	SlackSigningSecret string // SLACK_SIGNING_SECRET (required)
 	SlackChannel       string // SLACK_CHANNEL        (required)
@@ -92,6 +93,11 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
+	approvalLockTTL, err := envDuration("APPROVAL_LOCK_TTL", 5*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Config{
 		ListenPort:         listenPort,
 		PolicyFilePath:     envStringWithInfoNotice("POLICY_FILE", defaultPolicyFilePath, "using default policy file path"),
@@ -103,6 +109,7 @@ func LoadConfig() (*Config, error) {
 		SessionTTL:         sessionTTL,
 		SessionLockTTL:     sessionLockTTL,
 		LockAcquireTimeout: lockAcquireTimeout,
+		ApprovalLockTTL:    approvalLockTTL,
 		SlackBotToken:      slackBotToken,
 		SlackSigningSecret: slackSigningSecret,
 		SlackChannel:       slackChannel,
