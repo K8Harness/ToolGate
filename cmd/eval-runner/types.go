@@ -16,9 +16,9 @@ type EvalSuite struct {
 }
 
 type TraceRow struct {
-	ToolName  string
-	Decision  string
-	Arguments json.RawMessage
+	ToolName  string          `json:"tool_name"`
+	Decision  string          `json:"decision"`
+	Arguments json.RawMessage `json:"arguments,omitempty"`
 }
 
 type CheckFailure struct {
@@ -30,5 +30,6 @@ type CheckFailure struct {
 type CaseResult struct {
 	Name     string         `json:"name"`
 	Passed   bool           `json:"passed"`
-	Failures []CheckFailure `json:"failures"`
+	Failures []CheckFailure `json:"failures,omitempty"`
+	Trace    []TraceRow     `json:"trace,omitempty"`
 }

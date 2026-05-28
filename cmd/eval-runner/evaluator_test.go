@@ -25,9 +25,50 @@ func TestEvaluatePassesWhenAllChecksMatch(t *testing.T) {
 		Name:     "small-refund-allow",
 		Passed:   true,
 		Failures: nil,
+		Trace:    trace,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Evaluate() = %#v, want %#v", got, want)
+	}
+}
+
+func TestEvaluateIncludesTraceOnPass(t *testing.T) {
+	testCase := EvalCase{
+		Name:          "trace-pass",
+		MustInclude:   []string{"lookup_customer"},
+		PolicyOutcome: "allow",
+	}
+	trace := []TraceRow{
+		{ToolName: "lookup_customer", Decision: "allow", Arguments: json.RawMessage(`{"customer":"abc"}`)},
+	}
+
+	got := Evaluate(testCase, trace)
+
+	if !got.Passed {
+		t.Fatalf("Evaluate() Passed = false, want true; failures = %#v", got.Failures)
+	}
+	if !reflect.DeepEqual(got.Trace, trace) {
+		t.Fatalf("Trace = %#v, want %#v", got.Trace, trace)
+	}
+}
+
+func TestEvaluateIncludesTraceOnFailure(t *testing.T) {
+	testCase := EvalCase{
+		Name:          "trace-fail",
+		MustInclude:   []string{"create_refund"},
+		PolicyOutcome: "allow",
+	}
+	trace := []TraceRow{
+		{ToolName: "lookup_customer", Decision: "allow"},
+	}
+
+	got := Evaluate(testCase, trace)
+
+	if got.Passed {
+		t.Fatal("Evaluate() Passed = true, want false")
+	}
+	if !reflect.DeepEqual(got.Trace, trace) {
+		t.Fatalf("Trace = %#v, want %#v", got.Trace, trace)
 	}
 }
 
