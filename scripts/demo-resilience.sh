@@ -75,7 +75,13 @@ fi
 section "SCENARIO 3 — Approval Flow Timeout (graceful degradation)"
 echo "  [RESTORE] Starting localstripe-mcp..."
 $COMPOSE start localstripe-mcp
-sleep 10
+echo "  Waiting for localstripe-mcp to be healthy..."
+for i in {1..30}; do
+  if $COMPOSE ps localstripe-mcp | grep -q "healthy"; then
+    break
+  fi
+  sleep 1
+done
 
 echo "  [FAULT] Stopping mock-slack..."
 $COMPOSE stop mock-slack
