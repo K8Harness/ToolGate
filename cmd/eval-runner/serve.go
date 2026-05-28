@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+//go:embed ui.html
+var uiHTML []byte
 
 type evalResponse struct {
 	Passed     bool         `json:"passed"`
@@ -61,6 +66,11 @@ func serve(suitePath string) error {
 		port = "8099"
 	}
 
+	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(uiHTML)
+	})
+
 	http.HandleFunc("POST /run-eval", makeEvalHandler(runner, suite, pool))
 
 	http.HandleFunc("POST /run-eval/ai", func(w http.ResponseWriter, r *http.Request) {
@@ -71,12 +81,44 @@ func serve(suitePath string) error {
 		makeEvalHandler(aiRunner, aiSuite, pool)(w, r)
 	})
 
+	http.HandleFunc("POST /run-eval/custom", makeCustomEvalHandler(pool))
+
 	http.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
 	slog.Info("eval server listening", "port", port)
 	return http.ListenAndServe(":"+port, nil)
+}
+
+func makeCustomEvalHandler(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Suite    string `json:"suite"`
+			AgentURL string `json:"agent_url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, fmt.Sprintf("invalid request: %v", err), http.StatusBadRequest)
+			return
+		}
+		if body.AgentURL == "" {
+			http.Error(w, "missing agent_url", http.StatusBadRequest)
+			return
+		}
+		if body.Suite == "" {
+			http.Error(w, "missing suite", http.StatusBadRequest)
+			return
+		}
+
+		suite, err := LoadSuiteFromReader(strings.NewReader(body.Suite))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("invalid suite: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		runner := NewCaseRunner(body.AgentURL, pool)
+		makeEvalHandler(runner, suite, pool)(w, r)
+	}
 }
 
 func makeEvalHandler(runner caseExecutor, suite *EvalSuite, _ *pgxpool.Pool) http.HandlerFunc {
@@ -104,15 +146,22 @@ func makeEvalHandler(runner caseExecutor, suite *EvalSuite, _ *pgxpool.Pool) htt
 			}
 		}
 
-		resp := evalResponse{
-			Passed:     passCount == len(results),
-			PassCount:  passCount,
-			TotalCount: len(results),
-			Cases:      results,
-			Report:     GenerateReport(results),
+		report := GenerateReport(results)
+
+		if r.Header.Get("Accept") == "application/json" {
+			resp := evalResponse{
+				Passed:     passCount == len(results),
+				PassCount:  passCount,
+				TotalCount: len(results),
+				Cases:      results,
+				Report:     report,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = fmt.Fprint(w, report)
 	}
 }

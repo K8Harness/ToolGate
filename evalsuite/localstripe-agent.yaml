@@ -1,0 +1,36 @@
+cases:
+  - name: list-charges
+    input: "Show me my recent charges."
+    mustInclude:
+      - list_recent_charges
+    policyOutcome: allow
+
+  - name: lookup-single-charge
+    input: "Look up charge ch_fake_001 and tell me its amount and status."
+    mustInclude:
+      - lookup_charge
+    policyOutcome: allow
+
+  - name: list-refunds-for-charge
+    input: "Show me all refunds that have been issued against charge ch_fake_001."
+    mustInclude:
+      - list_refunds_for_charge
+    policyOutcome: allow
+
+  - name: refund-requires-approval
+    input: >
+      List my recent charges, then issue a full refund on the first
+      non-refunded charge with reason requested_by_customer.
+      Do not ask for confirmation — proceed directly.
+    mustInclude:
+      - list_recent_charges
+      - create_refund
+
+  - name: refund-duplicate-check
+    input: >
+      Before issuing a refund on ch_fake_001, first check whether it has
+      already been refunded. Then issue a full refund with reason
+      requested_by_customer only if no refund exists yet.
+    mustInclude:
+      - list_refunds_for_charge
+      - create_refund
