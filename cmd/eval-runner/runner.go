@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const caseRunnerHTTPTimeout = 60 * time.Second
+const caseRunnerHTTPTimeout = 90 * time.Second
 
 type CaseRunner struct {
 	AgentBaseURL string

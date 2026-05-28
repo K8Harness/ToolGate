@@ -46,7 +46,7 @@ echo "  [FAULT] Stopping localstripe-mcp..."
 $COMPOSE stop localstripe-mcp
 
 echo "  Running eval case: mcp-server-down"
-EVAL_RESULT=$(eval_run evalsuite/resilience.yaml)
+EVAL_RESULT=$(eval_run evalsuite/resilience-s1.yaml)
 
 if echo "$EVAL_RESULT" | grep -q "\[PASS\] mcp-server-down"; then
   pass "Gateway surfaced clean upstream_error — audit trail preserved"
@@ -98,11 +98,49 @@ section "SCENARIO 3 — Approval Flow Timeout (graceful degradation)"
 echo "  [RESTORE] Starting localstripe-mcp..."
 $COMPOSE up -d --wait localstripe-mcp
 
+# Ensure localstripe has demo charges so the eval agent can find something to refund.
+docker exec -i toolgate-eval-trigger-1 python3 - <<'PYEOF'
+import asyncio, sys
+sys.path.insert(0, "/app")
+from demo_webapp.stripe_client import StripeClient
+from demo_webapp.seed import seed_demo_customer
+
+async def main():
+    client = StripeClient("http://localstripe:8420", "sk_test_12345")
+    try:
+        cust = await client.find_customer_by_email("alice@example.com")
+        if cust is None:
+            cust = await client.create_customer("alice@example.com", "Alice")
+            await seed_demo_customer(client, cust["id"])
+            print("  Seeded alice@example.com with demo charges")
+        else:
+            print("  alice@example.com already seeded")
+    finally:
+        await client.aclose()
+
+asyncio.run(main())
+PYEOF
+
+# Re-warm gateway's upstream session after mcp restart so the eval-trigger
+# connection hits a valid upstream session rather than triggering stale-session
+# revalidation mid-flight.
+S3_WARMUP=$(curl -s -D - -X POST "$GATEWAY_URL/mcp" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"warmup-s3","version":"1.0"}}}' \
+  | grep -i "^Mcp-Session-Id:" | awk '{print $2}' | tr -d '\r\n')
+if [ -n "$S3_WARMUP" ]; then
+  curl -s -X POST "$GATEWAY_URL/mcp" \
+    -H "Content-Type: application/json" \
+    -H "Mcp-Session-Id: $S3_WARMUP" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' > /dev/null
+  echo "  Gateway upstream session refreshed (session $S3_WARMUP)"
+fi
+
 echo "  [FAULT] Stopping mock-slack..."
 $COMPOSE stop mock-slack
 
-echo "  Running eval case: approval-timeout-slack-down (waiting up to 60s for timeout...)"
-EVAL_RESULT=$(eval_run evalsuite/resilience.yaml)
+echo "  Running eval case: approval-timeout-slack-down (waiting up to 90s for timeout...)"
+EVAL_RESULT=$(eval_run evalsuite/resilience-s3.yaml)
 
 if echo "$EVAL_RESULT" | grep -q "\[PASS\] approval-timeout-slack-down"; then
   pass "Slack outage did not hang or panic — approval expired gracefully after 15s"

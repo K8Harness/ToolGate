@@ -1,0 +1,6 @@
+cases:
+  - name: mcp-server-down
+    input: "Show me my recent charges."
+    mustInclude:
+      - list_recent_charges
+    policyOutcome: upstream_error
