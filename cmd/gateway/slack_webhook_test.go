@@ -64,7 +64,7 @@ func signLarkRequest(t *testing.T, verificationToken, timestamp, nonce string, b
 // buildLarkActionBody constructs a Lark card callback JSON body.
 func buildLarkActionBody(t *testing.T, action, ticketID, openID string) []byte {
 	t.Helper()
-	payload := larkCardCallbackPayload{
+	payload := larkCallbackEnvelope{
 		OpenID: openID,
 		Action: larkCardCallbackAction{
 			Tag: "button",

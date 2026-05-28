@@ -96,8 +96,25 @@ type larkCardCallbackAction struct {
 	Value larkActionValue `json:"value"`
 }
 
-// larkCardCallbackPayload is the JSON body Lark POSTs when a card button is clicked.
-type larkCardCallbackPayload struct {
+// larkCallbackEnvelope unmarshals both the old flat v1 payload and the nested
+// schema:"2.0" v2 payload that Lark now sends for card.action.trigger events.
+//
+// v1 (flat):  { "token": "...", "open_id": "...", "action": {...} }
+// v2 (nested): { "schema":"2.0", "header":{"token":"..."}, "event":{"operator":{"open_id":"..."}, "action":{...}} }
+type larkCallbackEnvelope struct {
+	Schema string `json:"schema"`
+	// v2 fields
+	Header struct {
+		Token string `json:"token"`
+	} `json:"header"`
+	Event struct {
+		Operator struct {
+			OpenID string `json:"open_id"`
+		} `json:"operator"`
+		Action larkCardCallbackAction `json:"action"`
+	} `json:"event"`
+	// v1 flat fields
+	Token  string                 `json:"token"`
 	OpenID string                 `json:"open_id"`
 	Action larkCardCallbackAction `json:"action"`
 }
@@ -152,49 +169,73 @@ func (h *LarkWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Extract and validate timestamp (replay attack prevention).
-	tsHeader := r.Header.Get("X-Lark-Request-Timestamp")
-	tsUnix, err := strconv.ParseInt(tsHeader, 10, 64)
-	if err != nil {
-		h.log.Warn("lark webhook: invalid timestamp header", "header", tsHeader)
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	delta := time.Now().Unix() - tsUnix
-	if delta < 0 {
-		delta = -delta
-	}
-	if delta > larkReplayWindowSeconds {
-		h.log.Warn("lark webhook: request timestamp outside replay window",
-			"timestamp", tsUnix,
-			"delta_seconds", delta,
-		)
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-
-	// Step 3: Verify signature = sha256(verificationToken + timestamp + nonce + body).
-	nonce := r.Header.Get("X-Lark-Request-Nonce")
-	expectedSig := computeLarkSignature(h.verificationToken, tsHeader, nonce, rawBody)
-	providedSig := r.Header.Get("X-Lark-Signature")
-	if expectedSig != providedSig {
-		h.log.Warn("lark webhook: signature mismatch")
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-
-	// Step 4: Parse JSON payload.
-	var payload larkCardCallbackPayload
-	if err := json.Unmarshal(rawBody, &payload); err != nil {
+	// Step 2–4: Verify request authenticity, then parse payload.
+	// Three modes are supported:
+	//   - Real Lark v2 (schema:"2.0"): token is in header.token; fields are nested under event.
+	//   - Real Lark v1 (flat):         token is in the root "token" field.
+	//   - mock-lark:                   HMAC headers (X-Lark-Request-Timestamp / Nonce / Signature).
+	var envelope larkCallbackEnvelope
+	if err := json.Unmarshal(rawBody, &envelope); err != nil {
 		h.log.Error("lark webhook: unmarshal payload failed", "error", err)
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
+	// Normalise v1/v2 into flat variables.
+	var token, openID string
+	var action larkCardCallbackAction
+	if envelope.Schema == "2.0" {
+		token = envelope.Header.Token
+		openID = envelope.Event.Operator.OpenID
+		action = envelope.Event.Action
+	} else {
+		token = envelope.Token
+		openID = envelope.OpenID
+		action = envelope.Action
+	}
+
+	tsHeader := r.Header.Get("X-Lark-Request-Timestamp")
+	if tsHeader == "" {
+		// Real Lark path: verify using the token embedded in the body.
+		if token != h.verificationToken {
+			h.log.Warn("lark webhook: token mismatch")
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+	} else {
+		// mock-lark path: verify using HMAC headers.
+		tsUnix, err := strconv.ParseInt(tsHeader, 10, 64)
+		if err != nil {
+			h.log.Warn("lark webhook: invalid timestamp header", "header", tsHeader)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		delta := time.Now().Unix() - tsUnix
+		if delta < 0 {
+			delta = -delta
+		}
+		if delta > larkReplayWindowSeconds {
+			h.log.Warn("lark webhook: request timestamp outside replay window",
+				"timestamp", tsUnix,
+				"delta_seconds", delta,
+			)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		nonce := r.Header.Get("X-Lark-Request-Nonce")
+		expectedSig := computeLarkSignature(h.verificationToken, tsHeader, nonce, rawBody)
+		providedSig := r.Header.Get("X-Lark-Signature")
+		if expectedSig != providedSig {
+			h.log.Warn("lark webhook: signature mismatch")
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+	}
+
 	// Step 5–6: Route on action value; extract ticketID.
-	ticketID := payload.Action.Value.TicketID
-	userID := payload.OpenID
-	actionName := payload.Action.Value.Action
+	ticketID := action.Value.TicketID
+	userID := openID
+	actionName := action.Value.Action
 
 	if ticketID == "" {
 		h.log.Warn("lark webhook: missing ticket_id in action value")
@@ -240,6 +281,10 @@ func (h *LarkWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
-	// Step 9: Return HTTP 200 to acknowledge the Lark callback.
+	// Step 9: Return HTTP 200 with an empty JSON body.
+	// Lark requires a JSON response body for interactive card callbacks;
+	// an empty HTTP body triggers error 200671 ("please try again") in the chat.
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{}`))
 }

@@ -2,7 +2,7 @@ services:
   gateway:
     image: debian:bookworm-slim
     working_dir: /workspace
-    command: ["/workspace/.compose-bin/gateway"]
+    command: ["sh", "-c", "apt-get update -qq && apt-get install -y -qq ca-certificates > /dev/null 2>&1 && /workspace/.compose-bin/gateway"]
     depends_on:
       fake-upstream:
         condition: service_started
@@ -10,20 +10,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      mock-lark:
-        condition: service_started
     environment:
       GATEWAY_PORT: "8080"
       POLICY_FILE: policy.yaml
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
       REDIS_DSN: redis://redis:6379/0
-      LARK_APP_ID: "cli_demo_app_id"
-      LARK_APP_SECRET: "demo_app_secret"
-      LARK_CHAT_ID: "oc_demo_approvals"
-      LARK_VERIFICATION_TOKEN: "demo-verification-token"
-      LARK_API_BASE_URL: "http://mock-lark:8090/open-apis"
+      LARK_APP_ID: "${LARK_APP_ID}"
+      LARK_APP_SECRET: "${LARK_APP_SECRET}"
+      LARK_CHAT_ID: "${LARK_CHAT_ID}"
+      LARK_VERIFICATION_TOKEN: "${LARK_VERIFICATION_TOKEN}"
       SESSION_LOCK_TTL: "3s"
       LOCK_ACQUIRE_TIMEOUT: "5s"
+      APPROVAL_TIMEOUT: "25s"
       UPSTREAM_MCP_URL: http://fake-upstream:8081/mcp
     ports:
       - "18080:8080"

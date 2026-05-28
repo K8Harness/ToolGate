@@ -380,31 +380,6 @@ func TestLoadConfigReadsLarkVars(t *testing.T) {
 	}
 }
 
-func TestLoadConfigReadsApprovalLockTTL(t *testing.T) {
-	setRequiredEnv(t)
-	t.Setenv("APPROVAL_LOCK_TTL", "15s")
-
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
-	}
-	if cfg.ApprovalLockTTL != 15*time.Second {
-		t.Fatalf("ApprovalLockTTL = %v, want 15s", cfg.ApprovalLockTTL)
-	}
-}
-
-func TestLoadConfigDefaultsApprovalLockTTLToFiveMinutes(t *testing.T) {
-	setRequiredEnv(t)
-	t.Setenv("APPROVAL_LOCK_TTL", "")
-
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
-	}
-	if cfg.ApprovalLockTTL != 5*time.Minute {
-		t.Fatalf("ApprovalLockTTL = %v, want 5m0s", cfg.ApprovalLockTTL)
-	}
-}
 
 func setRequiredEnv(t *testing.T) {
 	t.Helper()

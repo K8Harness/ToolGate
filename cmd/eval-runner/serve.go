@@ -91,7 +91,10 @@ func serve(suitePath string) error {
 	http.HandleFunc("POST /run-scenario/stream", makeScenarioStreamHandler(scenarioDeps{
 		pool:                 pool,
 		defaultAgentURL:      cfg.AgentURL,
+		defaultAIAgentURL:    aiAgentURL,
 		defaultGatewayMCPURL: os.Getenv("GATEWAY_MCP_URL"),
+		mcpAddr:              os.Getenv("STACK_HEALTH_MCP_ADDR"),
+		larkURL:              os.Getenv("STACK_HEALTH_SLACK_URL"),
 		newRunner: func(agentURL string) caseExecutor {
 			return NewCaseRunner(agentURL, pool)
 		},
@@ -103,7 +106,17 @@ func serve(suitePath string) error {
 	http.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	http.HandleFunc("GET /stack-health", makeStackHealthHandler(stackHealthDeps{pool: pool}))
+	http.HandleFunc("GET /stack-health", makeStackHealthHandler(stackHealthDeps{
+		pool:       pool,
+		gatewayURL: func() string {
+			if u := os.Getenv("GATEWAY_MCP_URL"); u != "" {
+				return u
+			}
+			return "http://localhost:18080/mcp"
+		}(),
+		mcpAddr: os.Getenv("STACK_HEALTH_MCP_ADDR"),
+		slackURL: os.Getenv("STACK_HEALTH_SLACK_URL"),
+	}))
 
 	gatewayMCPURL := os.Getenv("GATEWAY_MCP_URL")
 	if gatewayMCPURL == "" {

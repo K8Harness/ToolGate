@@ -358,7 +358,7 @@ type policyGateEvaluatorStub struct {
 	decision corepolicy.PolicyDecision
 }
 
-func (s *policyGateEvaluatorStub) Evaluate(policy *corepolicy.AgentPolicy, toolName string) corepolicy.PolicyDecision {
+func (s *policyGateEvaluatorStub) Evaluate(policy *corepolicy.AgentPolicy, toolName string, args json.RawMessage) corepolicy.PolicyDecision {
 	s.calls++
 	s.toolName = toolName
 	return s.decision

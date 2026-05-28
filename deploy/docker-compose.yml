@@ -27,12 +27,14 @@ services:
       POLICY_FILE: /app/policy.yaml
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
       REDIS_DSN: redis://redis:6379/0
-      SLACK_BOT_TOKEN: "xoxb-demo-token"
-      SLACK_SIGNING_SECRET: "demo-signing-secret"
-      SLACK_CHANNEL: "C-DEMO-APPROVALS"
-      SLACK_API_BASE_URL: http://mock-slack:8090/api
+      LARK_APP_ID: "app-demo"
+      LARK_APP_SECRET: "demo-secret"
+      LARK_CHAT_ID: "oc_demo-chat"
+      LARK_VERIFICATION_TOKEN: "demo-verification-token"
+      LARK_API_BASE_URL: http://mock-lark:8090/open-apis
       SESSION_LOCK_TTL: "3s"
       LOCK_ACQUIRE_TIMEOUT: "5s"
+      APPROVAL_TIMEOUT: "25s"
       UPSTREAM_MCP_URL: http://localstripe-mcp:8421/mcp
     healthcheck:
       test:
@@ -45,8 +47,6 @@ services:
       retries: 12
       start_period: 5s
     restart: on-failure
-    ports:
-      - "18080:8080"
     networks:
       - eval-gate
 
@@ -151,24 +151,31 @@ services:
     networks:
       - eval-gate
 
-  mock-slack:
+  mock-lark:
     build:
       context: ..
-      dockerfile: examples/mock-slack/Dockerfile
+      dockerfile_inline: |
+        FROM golang:1.25-alpine AS builder
+        WORKDIR /build
+        COPY go.mod go.sum ./
+        RUN go mod download
+        COPY . .
+        RUN CGO_ENABLED=0 GOOS=linux go build -o /mock-lark ./examples/mock-lark/
+
+        FROM alpine:latest
+        COPY --from=builder /mock-lark /mock-lark
+        EXPOSE 8090
+        ENTRYPOINT ["/mock-lark"]
     depends_on:
       gateway:
         condition: service_healthy
     environment:
       GATEWAY_URL: http://gateway:8080
-      SLACK_SIGNING_SECRET: demo-signing-secret
+      LARK_VERIFICATION_TOKEN: "demo-verification-token"
     expose:
       - "8090"
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q -O /dev/null --header='Content-Type: application/json' --post-data='{}' http://127.0.0.1:8090/api/chat.postMessage",
-        ]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8090/healthz"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -267,6 +274,9 @@ services:
       AI_AGENT_URL: http://eval-trigger:8086
       AI_SUITE_PATH: /app/evalsuite/ai-agent.yaml
       EVAL_SERVE_PORT: "8099"
+      GATEWAY_MCP_URL: http://gateway:8080/mcp
+      STACK_HEALTH_MCP_ADDR: localstripe-mcp:8421
+      STACK_HEALTH_SLACK_URL: http://mock-lark:8090/healthz
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8099/healthz"]
       interval: 5s

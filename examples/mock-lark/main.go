@@ -29,6 +29,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/open-apis/auth/v3/tenant_access_token/internal", handleTenantToken)
 	mux.HandleFunc("/open-apis/im/v1/messages", handleSendMessage)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	log.Println("mock-lark listening on :8090")
 	log.Fatal(http.ListenAndServe(":8090", mux))
 }

@@ -125,7 +125,8 @@ func TestScenarioStreamYAMLScenarioUsesDefaultAgentURL(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	makeScenarioStreamHandler(scenarioDeps{
-		defaultAgentURL: "http://agent.example",
+		defaultAIAgentURL: "http://agent.example",
+		isMCPReachable:   func(string) bool { return false }, // simulate MCP down
 		newRunner: func(agentURL string) caseExecutor {
 			if agentURL != "http://agent.example" {
 				t.Fatalf("agentURL = %q, want default", agentURL)
@@ -139,6 +140,31 @@ func TestScenarioStreamYAMLScenarioUsesDefaultAgentURL(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestScenarioStreamMCPCrashFailsPreconditionWhenMCPIsUp(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/run-scenario/stream", strings.NewReader(`{"scenario_id":"mcp-crash","agent_url":"http://agent.example"}`))
+	rec := httptest.NewRecorder()
+
+	makeScenarioStreamHandler(scenarioDeps{
+		defaultAIAgentURL: "http://agent.example",
+		isMCPReachable:   func(string) bool { return true }, // simulate MCP still up
+		newRunner: func(agentURL string) caseExecutor {
+			t.Fatal("runner should not be called when precondition fails")
+			return nil
+		},
+	})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (SSE stream)", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "precondition") {
+		t.Fatalf("expected precondition failure in SSE body, got: %s", body)
+	}
+	if !strings.Contains(body, "still up") {
+		t.Fatalf("expected 'still up' message in SSE body, got: %s", body)
 	}
 }
 

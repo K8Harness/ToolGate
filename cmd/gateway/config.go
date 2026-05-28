@@ -30,6 +30,7 @@ type Config struct {
 	SessionTTL         time.Duration
 	SessionLockTTL     time.Duration
 	LockAcquireTimeout time.Duration
+	ApprovalTimeout    time.Duration
 	LarkAppID             string // LARK_APP_ID             (required)
 	LarkAppSecret         string // LARK_APP_SECRET         (required)
 	LarkChatID            string // LARK_CHAT_ID            (required)
@@ -97,6 +98,11 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
+	approvalTimeout, err := envDuration("APPROVAL_TIMEOUT", defaultApprovalTimeout)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Config{
 		ListenPort:         listenPort,
 		PolicyFilePath:     envStringWithInfoNotice("POLICY_FILE", defaultPolicyFilePath, "using default policy file path"),
@@ -108,6 +114,7 @@ func LoadConfig() (*Config, error) {
 		SessionTTL:         sessionTTL,
 		SessionLockTTL:     sessionLockTTL,
 		LockAcquireTimeout: lockAcquireTimeout,
+		ApprovalTimeout:    approvalTimeout,
 		LarkAppID:             larkAppID,
 		LarkAppSecret:         larkAppSecret,
 		LarkChatID:            larkChatID,

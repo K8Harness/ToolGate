@@ -8,6 +8,10 @@ rules:
   - tool: list_refunds_for_charge
     action: allow
   - tool: create_refund
+    when:
+      dry_run: true
+    action: allow
+  - tool: create_refund
     action: approvalRequired
   - tool: send_slack_message
     action: redact

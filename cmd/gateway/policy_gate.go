@@ -26,13 +26,13 @@ type ticketInserter interface {
 }
 
 type policyEvaluator interface {
-	Evaluate(policy *corepolicy.AgentPolicy, toolName string) corepolicy.PolicyDecision
+	Evaluate(policy *corepolicy.AgentPolicy, toolName string, args json.RawMessage) corepolicy.PolicyDecision
 }
 
 type defaultPolicyEvaluator struct{}
 
-func (defaultPolicyEvaluator) Evaluate(policy *corepolicy.AgentPolicy, toolName string) corepolicy.PolicyDecision {
-	return corepolicy.Evaluate(policy, toolName)
+func (defaultPolicyEvaluator) Evaluate(policy *corepolicy.AgentPolicy, toolName string, args json.RawMessage) corepolicy.PolicyDecision {
+	return corepolicy.Evaluate(policy, toolName, args)
 }
 
 type BudgetTracker struct {
@@ -160,7 +160,7 @@ func (h *PolicyGateHandler) Handle(ctx context.Context, req *mcp.JSONRPCRequest)
 		return mcp.NewErrorResponse(req.ID, mcp.CodePolicyDenied, "tool-call budget exceeded"), nil
 	}
 
-	decision := h.evaluator.Evaluate(h.policy, toolName)
+	decision := h.evaluator.Evaluate(h.policy, toolName, arguments)
 	if decision.Action != corepolicy.ActionRedact {
 		h.audit.Write(AuditRecord{
 			SessionID: sessionID,

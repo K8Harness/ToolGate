@@ -32,7 +32,7 @@ func NewCaseRunner(agentBaseURL string, db *pgxpool.Pool) *CaseRunner {
 }
 
 const auditPollInterval = 300 * time.Millisecond
-const auditPollTimeout = 30 * time.Second
+const auditPollTimeout = 90 * time.Second
 
 func (r *CaseRunner) Run(ctx context.Context, c EvalCase) ([]TraceRow, error) {
 	sessionID, err := r.trigger(ctx, c.Input)

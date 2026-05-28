@@ -211,7 +211,7 @@ func newApprovalBridgeIntegrationHarness(t *testing.T, timeout, lockTTL, lockExt
 
 	store := NewTicketStore(pool)
 	locker := NewSessionLocker(redisClient, lockTTL, 250*time.Millisecond)
-	bridge := NewRedisApprovalBridge(redisClient, store, locker, lockTTL, 5*time.Minute, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bridge := NewRedisApprovalBridge(redisClient, store, locker, lockTTL, defaultApprovalTimeout, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bridge.timeout = timeout
 	bridge.lockExtendInterval = lockExtendInterval
 

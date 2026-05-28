@@ -86,7 +86,7 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 	ticketStore := NewTicketStore(pool)
 	sessionLocker := NewSessionLocker(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)
 	larkNotifier := NewLarkClient(config.LarkAppID, config.LarkAppSecret, config.LarkChatID, config.LarkAPIBaseURL, logger)
-	approvalBridge := NewRedisApprovalBridge(redisClient, ticketStore, sessionLocker, config.SessionLockTTL, logger)
+	approvalBridge := NewRedisApprovalBridge(redisClient, ticketStore, sessionLocker, config.SessionLockTTL, config.ApprovalTimeout, logger)
 	larkWebhook := NewLarkWebhookHandler(config.LarkVerificationToken, ticketStore, redisClient, logger)
 	policyGate := NewPolicyGateHandler(policy, budgetTracker, auditWriter, ticketStore, approvalBridge, larkNotifier, logger)
 	turnRWLock := NewTurnRWLock(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)
@@ -101,6 +101,7 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 
 	server := NewServer(config, pipeline, logger)
 	server.forwarder = forwarder
+	server.audit = auditWriter
 	server.guard = guard
 	server.SetWebhookHandler(larkWebhook)
 	return server, cleanup, nil
