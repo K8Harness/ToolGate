@@ -34,6 +34,7 @@ type Server struct {
 	sessions     *SessionRegistry
 	mux          *http.ServeMux
 	log          *slog.Logger
+	audit        auditRecorder // nil-safe; set by buildGatewayServer
 }
 
 func NewServer(config *Config, pipeline *mcp.Pipeline, log *slog.Logger) *Server {
@@ -129,6 +130,15 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if req.Method == "tools/call" {
 			NewRequestLogger(s.log).LogOutcome(r.Context(), req, nil, err)
+			if toolName != "" && s.audit != nil {
+				s.audit.Write(AuditRecord{
+					SessionID: sessionID,
+					TurnID:    mcp.TurnIDFromContext(r.Context()),
+					ToolName:  toolName,
+					Decision:  "upstream_error",
+					Reason:    err.Error(),
+				})
+			}
 		}
 		s.errorResponse(w, req.ID, jsonRPCCode(err), err.Error())
 		return

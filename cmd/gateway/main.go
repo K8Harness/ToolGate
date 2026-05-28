@@ -100,6 +100,7 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 	pipeline.Use(policyGate)
 
 	server := NewServer(config, pipeline, logger)
+	server.audit = auditWriter
 	server.forwarder = forwarder
 	server.guard = guard
 	server.SetSlackWebhookHandler(slackWebhook)
