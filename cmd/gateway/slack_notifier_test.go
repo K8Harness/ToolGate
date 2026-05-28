@@ -13,35 +13,45 @@ import (
 
 // --- Helpers ---
 
-// capturedSlackRequest holds the decoded request captured by the test server.
-type capturedSlackRequest struct {
-	authHeader string
-	body       []byte
+// capturedLarkRequests holds requests captured by the two-endpoint test server.
+type capturedLarkRequests struct {
+	tokenBody []byte
+	msgAuth   string
+	msgBody   []byte
 }
 
-func newSlackTestServer(t *testing.T, statusCode int) (*httptest.Server, *capturedSlackRequest) {
+// newLarkTestServer creates a test server that handles both the token endpoint and
+// the message endpoint, capturing requests for assertion.
+func newLarkTestServer(t *testing.T, msgStatusCode int) (*httptest.Server, *capturedLarkRequests) {
 	t.Helper()
-	cap := &capturedSlackRequest{}
+	cap := &capturedLarkRequests{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cap.authHeader = r.Header.Get("Authorization")
 		body, _ := io.ReadAll(r.Body)
-		cap.body = body
-		w.WriteHeader(statusCode)
-		if statusCode == http.StatusOK {
-			// Minimal Slack API success response
-			_, _ = w.Write([]byte(`{"ok":true}`))
+		switch r.URL.Path {
+		case "/auth/v3/tenant_access_token/internal":
+			cap.tokenBody = body
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","tenant_access_token":"mock-token","expire":7200}`))
+		case "/im/v1/messages":
+			cap.msgAuth = r.Header.Get("Authorization")
+			cap.msgBody = body
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(msgStatusCode)
+			if msgStatusCode == http.StatusOK {
+				_, _ = w.Write([]byte(`{"code":0}`))
+			}
+		default:
+			http.NotFound(w, r)
 		}
 	}))
 	t.Cleanup(srv.Close)
 	return srv, cap
 }
 
-func newTestSlackClient(t *testing.T, serverURL, botToken, channel string) *SlackClient {
+func newTestLarkClient(t *testing.T, serverURL, appID, appSecret, chatID string) *LarkClient {
 	t.Helper()
-	log := slog.Default()
-	client := newSlackClientWithHTTP(botToken, channel, &http.Client{}, log)
-	client.apiBaseURL = serverURL
-	return client
+	return newLarkClientWithHTTP(appID, appSecret, chatID, serverURL, &http.Client{}, slog.Default())
 }
 
 func sampleTicketRecord() TicketRecord {
@@ -56,134 +66,214 @@ func sampleTicketRecord() TicketRecord {
 
 // --- Tests ---
 
-// TestSlackClientSendsCorrectActionIDs verifies that the Block Kit message includes
-// action_id values "approval_approve" and "approval_deny" on the buttons.
-func TestSlackClientSendsCorrectActionIDs(t *testing.T) {
+// TestLarkClientFetchesTokenBeforeSendingMessage verifies the token endpoint is called
+// and the resulting token is used in the Authorization header.
+func TestLarkClientFetchesTokenBeforeSendingMessage(t *testing.T) {
 	t.Parallel()
 
-	srv, cap := newSlackTestServer(t, http.StatusOK)
-	client := newTestSlackClient(t, srv.URL, "xoxb-test-token", "C12345")
+	srv, cap := newLarkTestServer(t, http.StatusOK)
+	client := newTestLarkClient(t, srv.URL, "cli_app", "app_secret", "oc_chat")
 	ticket := sampleTicketRecord()
-	ticketID := "ticket-001"
 
-	if err := client.SendApprovalRequest(t.Context(), ticketID, ticket); err != nil {
+	if err := client.SendApprovalRequest(t.Context(), "ticket-001", ticket); err != nil {
 		t.Fatalf("SendApprovalRequest() error = %v, want nil", err)
 	}
 
-	// Parse the sent body to inspect action IDs
-	var payload map[string]interface{}
-	if err := json.Unmarshal(cap.body, &payload); err != nil {
-		t.Fatalf("could not parse request body: %v\nbody: %s", err, string(cap.body))
+	if cap.tokenBody == nil {
+		t.Fatal("token endpoint was not called")
 	}
-
-	blocks, ok := payload["blocks"].([]interface{})
-	if !ok || len(blocks) < 2 {
-		t.Fatalf("expected at least 2 blocks, got: %v", payload["blocks"])
+	var tokenReq map[string]string
+	if err := json.Unmarshal(cap.tokenBody, &tokenReq); err != nil {
+		t.Fatalf("parse token request body: %v", err)
 	}
-
-	actionsBlock, ok := blocks[1].(map[string]interface{})
-	if !ok {
-		t.Fatalf("blocks[1] is not an object: %T", blocks[1])
+	if tokenReq["app_id"] != "cli_app" {
+		t.Errorf("token request app_id = %q, want %q", tokenReq["app_id"], "cli_app")
 	}
-	if actionsBlock["type"] != "actions" {
-		t.Fatalf("blocks[1].type = %q, want %q", actionsBlock["type"], "actions")
-	}
-
-	elements, ok := actionsBlock["elements"].([]interface{})
-	if !ok || len(elements) < 2 {
-		t.Fatalf("expected 2 button elements, got: %v", actionsBlock["elements"])
-	}
-
-	approveBtn, ok := elements[0].(map[string]interface{})
-	if !ok {
-		t.Fatal("approve button is not a map")
-	}
-	if approveBtn["action_id"] != "approval_approve" {
-		t.Errorf("approve button action_id = %q, want %q", approveBtn["action_id"], "approval_approve")
-	}
-
-	denyBtn, ok := elements[1].(map[string]interface{})
-	if !ok {
-		t.Fatal("deny button is not a map")
-	}
-	if denyBtn["action_id"] != "approval_deny" {
-		t.Errorf("deny button action_id = %q, want %q", denyBtn["action_id"], "approval_deny")
+	if cap.msgAuth != "Bearer mock-token" {
+		t.Errorf("message Authorization = %q, want %q", cap.msgAuth, "Bearer mock-token")
 	}
 }
 
-// TestSlackClientButtonValueIsTicketID verifies that both buttons carry the ticket ID as value.
-func TestSlackClientButtonValueIsTicketID(t *testing.T) {
+// TestLarkClientSendsCorrectChatID verifies receive_id in the message payload equals the chatID.
+func TestLarkClientSendsCorrectChatID(t *testing.T) {
 	t.Parallel()
 
-	srv, cap := newSlackTestServer(t, http.StatusOK)
-	client := newTestSlackClient(t, srv.URL, "xoxb-test-token", "C12345")
+	srv, cap := newLarkTestServer(t, http.StatusOK)
+	chatID := "oc_my_channel"
+	client := newTestLarkClient(t, srv.URL, "cli_app", "secret", chatID)
 	ticket := sampleTicketRecord()
-	ticketID := "ticket-val-002"
+
+	if err := client.SendApprovalRequest(t.Context(), "ticket-002", ticket); err != nil {
+		t.Fatalf("SendApprovalRequest() error = %v, want nil", err)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(cap.msgBody, &payload); err != nil {
+		t.Fatalf("parse message body: %v", err)
+	}
+	if payload["receive_id"] != chatID {
+		t.Errorf("receive_id = %q, want %q", payload["receive_id"], chatID)
+	}
+	if payload["msg_type"] != "interactive" {
+		t.Errorf("msg_type = %q, want %q", payload["msg_type"], "interactive")
+	}
+}
+
+// TestLarkClientCardContainsToolDetails verifies the card content includes tool, args, session.
+func TestLarkClientCardContainsToolDetails(t *testing.T) {
+	t.Parallel()
+
+	srv, cap := newLarkTestServer(t, http.StatusOK)
+	client := newTestLarkClient(t, srv.URL, "cli_app", "secret", "oc_chat")
+	ticket := sampleTicketRecord()
+	ticketID := "ticket-003"
 
 	if err := client.SendApprovalRequest(t.Context(), ticketID, ticket); err != nil {
 		t.Fatalf("SendApprovalRequest() error = %v, want nil", err)
 	}
 
-	var payload map[string]interface{}
-	if err := json.Unmarshal(cap.body, &payload); err != nil {
-		t.Fatalf("could not parse request body: %v", err)
+	// The content field is a JSON string containing the card JSON.
+	var msgPayload map[string]interface{}
+	if err := json.Unmarshal(cap.msgBody, &msgPayload); err != nil {
+		t.Fatalf("parse message body: %v", err)
+	}
+	contentStr, ok := msgPayload["content"].(string)
+	if !ok {
+		t.Fatalf("content field is not a string: %T", msgPayload["content"])
 	}
 
-	blocks := payload["blocks"].([]interface{})
-	actionsBlock := blocks[1].(map[string]interface{})
-	elements := actionsBlock["elements"].([]interface{})
+	var card map[string]interface{}
+	if err := json.Unmarshal([]byte(contentStr), &card); err != nil {
+		t.Fatalf("parse card JSON: %v", err)
+	}
 
-	for i, elem := range elements {
-		btn := elem.(map[string]interface{})
-		if btn["value"] != ticketID {
-			t.Errorf("button[%d].value = %q, want %q", i, btn["value"], ticketID)
+	elements, ok := card["elements"].([]interface{})
+	if !ok || len(elements) < 2 {
+		t.Fatalf("expected at least 2 card elements, got: %v", card["elements"])
+	}
+
+	divBlock, ok := elements[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("elements[0] is not an object: %T", elements[0])
+	}
+	textObj, ok := divBlock["text"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("elements[0].text is not an object: %T", divBlock["text"])
+	}
+	textContent, _ := textObj["content"].(string)
+
+	for _, want := range []string{ticket.ToolName, "ls -la", ticket.SessionID} {
+		if !strings.Contains(textContent, want) {
+			t.Errorf("card text missing %q\ntext: %s", want, textContent)
 		}
 	}
 }
 
-// TestSlackClientSendsAuthorizationHeader verifies the Authorization: Bearer <botToken> header.
-func TestSlackClientSendsAuthorizationHeader(t *testing.T) {
+// TestLarkClientButtonValuesContainTicketID verifies Approve/Deny buttons embed the ticketID.
+func TestLarkClientButtonValuesContainTicketID(t *testing.T) {
 	t.Parallel()
 
-	srv, cap := newSlackTestServer(t, http.StatusOK)
-	botToken := "xoxb-my-secret-token"
-	client := newTestSlackClient(t, srv.URL, botToken, "C12345")
+	srv, cap := newLarkTestServer(t, http.StatusOK)
+	client := newTestLarkClient(t, srv.URL, "cli_app", "secret", "oc_chat")
 	ticket := sampleTicketRecord()
+	ticketID := "ticket-val-004"
 
-	if err := client.SendApprovalRequest(t.Context(), "ticket-hdr-003", ticket); err != nil {
+	if err := client.SendApprovalRequest(t.Context(), ticketID, ticket); err != nil {
 		t.Fatalf("SendApprovalRequest() error = %v, want nil", err)
 	}
 
-	want := "Bearer " + botToken
-	if cap.authHeader != want {
-		t.Errorf("Authorization header = %q, want %q", cap.authHeader, want)
+	var msgPayload map[string]interface{}
+	_ = json.Unmarshal(cap.msgBody, &msgPayload)
+	contentStr, _ := msgPayload["content"].(string)
+	var card map[string]interface{}
+	_ = json.Unmarshal([]byte(contentStr), &card)
+	elements := card["elements"].([]interface{})
+	actionBlock := elements[1].(map[string]interface{})
+	actions := actionBlock["actions"].([]interface{})
+
+	if len(actions) < 2 {
+		t.Fatalf("expected 2 buttons, got %d", len(actions))
+	}
+	for i, a := range actions {
+		btn := a.(map[string]interface{})
+		value, _ := btn["value"].(map[string]interface{})
+		if value["ticket_id"] != ticketID {
+			t.Errorf("button[%d].value.ticket_id = %q, want %q", i, value["ticket_id"], ticketID)
+		}
 	}
 }
 
-// TestSlackClientNon200ReturnsWrappedError verifies that a non-200 response from Slack
-// results in a wrapped error being returned.
-func TestSlackClientNon200ReturnsWrappedError(t *testing.T) {
+// TestLarkClientButtonActionsAreApproveAndDeny verifies button values carry correct action names.
+func TestLarkClientButtonActionsAreApproveAndDeny(t *testing.T) {
 	t.Parallel()
 
-	srv, _ := newSlackTestServer(t, http.StatusInternalServerError)
-	client := newTestSlackClient(t, srv.URL, "xoxb-test-token", "C12345")
+	srv, cap := newLarkTestServer(t, http.StatusOK)
+	client := newTestLarkClient(t, srv.URL, "cli_app", "secret", "oc_chat")
 	ticket := sampleTicketRecord()
 
-	err := client.SendApprovalRequest(t.Context(), "ticket-err-004", ticket)
-	if err == nil {
-		t.Fatal("SendApprovalRequest() error = nil, want wrapped error for non-200 status")
+	if err := client.SendApprovalRequest(t.Context(), "ticket-005", ticket); err != nil {
+		t.Fatalf("SendApprovalRequest() error = %v, want nil", err)
+	}
+
+	var msgPayload map[string]interface{}
+	_ = json.Unmarshal(cap.msgBody, &msgPayload)
+	contentStr, _ := msgPayload["content"].(string)
+	var card map[string]interface{}
+	_ = json.Unmarshal([]byte(contentStr), &card)
+	elements := card["elements"].([]interface{})
+	actionBlock := elements[1].(map[string]interface{})
+	actions := actionBlock["actions"].([]interface{})
+
+	approve := actions[0].(map[string]interface{})
+	approveValue, _ := approve["value"].(map[string]interface{})
+	if approveValue["action"] != "approve" {
+		t.Errorf("button[0].value.action = %q, want %q", approveValue["action"], "approve")
+	}
+
+	deny := actions[1].(map[string]interface{})
+	denyValue, _ := deny["value"].(map[string]interface{})
+	if denyValue["action"] != "deny" {
+		t.Errorf("button[1].value.action = %q, want %q", denyValue["action"], "deny")
 	}
 }
 
-// TestSlackClientTruncatesLongArguments verifies that arguments > 2000 chars are truncated
-// so the Slack block text stays within limits.
-func TestSlackClientTruncatesLongArguments(t *testing.T) {
+// TestLarkClientNon200MessageResponseReturnsError verifies a non-200 from the message endpoint.
+func TestLarkClientNon200MessageResponseReturnsError(t *testing.T) {
 	t.Parallel()
 
-	srv, cap := newSlackTestServer(t, http.StatusOK)
-	client := newTestSlackClient(t, srv.URL, "xoxb-test-token", "C12345")
+	srv, _ := newLarkTestServer(t, http.StatusInternalServerError)
+	client := newTestLarkClient(t, srv.URL, "cli_app", "secret", "oc_chat")
 
-	// Build a very large arguments JSON value (> 3000 chars)
+	err := client.SendApprovalRequest(t.Context(), "ticket-006", sampleTicketRecord())
+	if err == nil {
+		t.Fatal("SendApprovalRequest() error = nil, want error for non-200 message response")
+	}
+}
+
+// TestLarkClientTokenFetchFailureReturnsError verifies token endpoint failure propagates.
+func TestLarkClientTokenFetchFailureReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// Server that returns a non-200 on token endpoint.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newLarkClientWithHTTP("bad_id", "bad_secret", "oc_chat", srv.URL, &http.Client{}, slog.Default())
+	err := client.SendApprovalRequest(t.Context(), "ticket-007", sampleTicketRecord())
+	if err == nil {
+		t.Fatal("SendApprovalRequest() error = nil, want error for token fetch failure")
+	}
+}
+
+// TestLarkClientTruncatesLongArguments verifies args longer than the limit are truncated.
+func TestLarkClientTruncatesLongArguments(t *testing.T) {
+	t.Parallel()
+
+	srv, cap := newLarkTestServer(t, http.StatusOK)
+	client := newTestLarkClient(t, srv.URL, "cli_app", "secret", "oc_chat")
+
 	longArgs := `{"command":"` + strings.Repeat("a", 3100) + `"}`
 	ticket := TicketRecord{
 		SessionID: "sess-trunc",
@@ -193,151 +283,47 @@ func TestSlackClientTruncatesLongArguments(t *testing.T) {
 		ExpiresAt: time.Now().Add(5 * time.Minute),
 	}
 
-	if err := client.SendApprovalRequest(t.Context(), "ticket-trunc-005", ticket); err != nil {
+	if err := client.SendApprovalRequest(t.Context(), "ticket-008", ticket); err != nil {
 		t.Fatalf("SendApprovalRequest() error = %v, want nil", err)
 	}
 
-	var payload map[string]interface{}
-	if err := json.Unmarshal(cap.body, &payload); err != nil {
-		t.Fatalf("could not parse request body: %v", err)
+	var msgPayload map[string]interface{}
+	_ = json.Unmarshal(cap.msgBody, &msgPayload)
+	contentStr, _ := msgPayload["content"].(string)
+	if strings.Contains(contentStr, strings.Repeat("a", 3100)) {
+		t.Error("card content contains untruncated long argument, want truncated")
 	}
-
-	blocks := payload["blocks"].([]interface{})
-	sectionBlock, ok := blocks[0].(map[string]interface{})
-	if !ok {
-		t.Fatal("blocks[0] is not an object")
-	}
-	textObj, ok := sectionBlock["text"].(map[string]interface{})
-	if !ok {
-		t.Fatal("blocks[0].text is not an object")
-	}
-	text, ok := textObj["text"].(string)
-	if !ok {
-		t.Fatal("blocks[0].text.text is not a string")
-	}
-
-	// The raw long args string should NOT appear verbatim; total text should be well under Slack's 3000-char limit
-	if len(text) > 3000 {
-		t.Errorf("section text length = %d, want <= 3000 chars (Slack block limit)", len(text))
+	if !strings.Contains(contentStr, larkArgsTruncateMark) {
+		t.Error("card content missing truncation mark")
 	}
 }
 
-// TestSlackClientSectionBlockContainsToolDetails verifies the section block includes
-// tool name, arguments, and session ID — and does NOT duplicate ToolName on a
-// separate *Operation:* line.
-func TestSlackClientSectionBlockContainsToolDetails(t *testing.T) {
+// TestNewLarkClientStoresCredentials verifies the constructor stores credentials correctly.
+func TestNewLarkClientStoresCredentials(t *testing.T) {
 	t.Parallel()
 
-	srv, cap := newSlackTestServer(t, http.StatusOK)
-	client := newTestSlackClient(t, srv.URL, "xoxb-test-token", "C12345")
-	ticket := sampleTicketRecord()
-	ticketID := "ticket-section-006"
-
-	if err := client.SendApprovalRequest(t.Context(), ticketID, ticket); err != nil {
-		t.Fatalf("SendApprovalRequest() error = %v, want nil", err)
+	client := NewLarkClient("cli_my_app", "my_secret", "oc_my_chat", larkAPIBaseURL, slog.Default())
+	if client.appID != "cli_my_app" {
+		t.Errorf("appID = %q, want %q", client.appID, "cli_my_app")
 	}
-
-	var payload map[string]interface{}
-	if err := json.Unmarshal(cap.body, &payload); err != nil {
-		t.Fatalf("could not parse request body: %v", err)
+	if client.appSecret != "my_secret" {
+		t.Errorf("appSecret = %q, want %q", client.appSecret, "my_secret")
 	}
-
-	blocks := payload["blocks"].([]interface{})
-	sectionBlock := blocks[0].(map[string]interface{})
-	if sectionBlock["type"] != "section" {
-		t.Errorf("blocks[0].type = %q, want %q", sectionBlock["type"], "section")
-	}
-
-	textObj := sectionBlock["text"].(map[string]interface{})
-	if textObj["type"] != "mrkdwn" {
-		t.Errorf("blocks[0].text.type = %q, want %q", textObj["type"], "mrkdwn")
-	}
-
-	text := textObj["text"].(string)
-
-	// Tool name, arguments, and session ID must all appear.
-	checks := []struct {
-		field string
-		value string
-	}{
-		{"ToolName", ticket.ToolName},
-		{"Arguments", `"command":"ls -la"`},
-		{"SessionID", ticket.SessionID},
-	}
-	for _, c := range checks {
-		if !strings.Contains(text, c.value) {
-			t.Errorf("section text missing %s %q\ntext: %s", c.field, c.value, text)
-		}
-	}
-
-	// The *Operation:* label must not appear — ToolName already conveys the
-	// operation; a separate *Operation:* line would only duplicate it.
-	if strings.Contains(text, "*Operation:*") {
-		t.Errorf("section text contains redundant *Operation:* label\ntext: %s", text)
-	}
-
-	// ToolName should appear exactly once (under the *Tool:* label).
-	if count := strings.Count(text, ticket.ToolName); count != 1 {
-		t.Errorf("ToolName %q appears %d time(s) in section text, want exactly 1\ntext: %s",
-			ticket.ToolName, count, text)
-	}
-}
-
-// TestSlackClientSendsToConfiguredChannel verifies the channel field in the payload.
-func TestSlackClientSendsToConfiguredChannel(t *testing.T) {
-	t.Parallel()
-
-	srv, cap := newSlackTestServer(t, http.StatusOK)
-	channel := "C-MY-CHANNEL"
-	client := newTestSlackClient(t, srv.URL, "xoxb-test-token", channel)
-	ticket := sampleTicketRecord()
-
-	if err := client.SendApprovalRequest(t.Context(), "ticket-ch-007", ticket); err != nil {
-		t.Fatalf("SendApprovalRequest() error = %v, want nil", err)
-	}
-
-	var payload map[string]interface{}
-	if err := json.Unmarshal(cap.body, &payload); err != nil {
-		t.Fatalf("could not parse request body: %v", err)
-	}
-
-	if payload["channel"] != channel {
-		t.Errorf("payload.channel = %q, want %q", payload["channel"], channel)
-	}
-}
-
-// TestSlackClientHTTPClientError verifies that a failed HTTP request returns an error.
-func TestSlackClientHTTPClientError(t *testing.T) {
-	t.Parallel()
-
-	// Use an invalid URL that will fail to connect
-	log := slog.Default()
-	client := newSlackClientWithHTTP("xoxb-token", "C12345", &http.Client{}, log)
-	client.apiBaseURL = "http://127.0.0.1:0" // No listener — connection refused
-
-	ticket := sampleTicketRecord()
-	err := client.SendApprovalRequest(t.Context(), "ticket-httperr-008", ticket)
-	if err == nil {
-		t.Fatal("SendApprovalRequest() error = nil, want error for failed HTTP request")
-	}
-}
-
-// TestNewSlackClientReturnsSensibleDefaults ensures NewSlackClient sets botToken and channel.
-func TestNewSlackClientReturnsSensibleDefaults(t *testing.T) {
-	t.Parallel()
-
-	botToken := "xoxb-new-client"
-	channel := "C-NEW"
-	log := slog.Default()
-	client := NewSlackClient(botToken, channel, slackAPIBaseURL, log)
-
-	if client.botToken != botToken {
-		t.Errorf("client.botToken = %q, want %q", client.botToken, botToken)
-	}
-	if client.channel != channel {
-		t.Errorf("client.channel = %q, want %q", client.channel, channel)
+	if client.chatID != "oc_my_chat" {
+		t.Errorf("chatID = %q, want %q", client.chatID, "oc_my_chat")
 	}
 	if client.httpClient == nil {
-		t.Error("client.httpClient = nil, want a default *http.Client")
+		t.Error("httpClient = nil, want a default *http.Client")
+	}
+}
+
+// TestLarkClientHTTPClientError verifies that a connection failure returns a wrapped error.
+func TestLarkClientHTTPClientError(t *testing.T) {
+	t.Parallel()
+
+	client := newLarkClientWithHTTP("id", "secret", "chat", "http://127.0.0.1:0", &http.Client{}, slog.Default())
+	err := client.SendApprovalRequest(t.Context(), "ticket-err-009", sampleTicketRecord())
+	if err == nil {
+		t.Fatal("SendApprovalRequest() error = nil, want error for connection refused")
 	}
 }

@@ -30,10 +30,11 @@ type Config struct {
 	SessionTTL         time.Duration
 	SessionLockTTL     time.Duration
 	LockAcquireTimeout time.Duration
-	SlackBotToken      string // SLACK_BOT_TOKEN     (required)
-	SlackSigningSecret string // SLACK_SIGNING_SECRET (required)
-	SlackChannel       string // SLACK_CHANNEL        (required)
-	SlackAPIBaseURL    string // SLACK_API_BASE_URL   (optional, default "https://slack.com/api")
+	LarkAppID             string // LARK_APP_ID             (required)
+	LarkAppSecret         string // LARK_APP_SECRET         (required)
+	LarkChatID            string // LARK_CHAT_ID            (required)
+	LarkVerificationToken string // LARK_VERIFICATION_TOKEN (required)
+	LarkAPIBaseURL        string // LARK_API_BASE_URL       (optional, default "https://open.feishu.cn/open-apis")
 }
 
 func LoadConfig() (*Config, error) {
@@ -50,21 +51,25 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("missing required environment variable REDIS_DSN")
 	}
 
-	slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
-	slackSigningSecret := os.Getenv("SLACK_SIGNING_SECRET")
-	slackChannel := os.Getenv("SLACK_CHANNEL")
-	var missingSlack []string
-	if slackBotToken == "" {
-		missingSlack = append(missingSlack, "SLACK_BOT_TOKEN")
+	larkAppID := os.Getenv("LARK_APP_ID")
+	larkAppSecret := os.Getenv("LARK_APP_SECRET")
+	larkChatID := os.Getenv("LARK_CHAT_ID")
+	larkVerificationToken := os.Getenv("LARK_VERIFICATION_TOKEN")
+	var missingLark []string
+	if larkAppID == "" {
+		missingLark = append(missingLark, "LARK_APP_ID")
 	}
-	if slackSigningSecret == "" {
-		missingSlack = append(missingSlack, "SLACK_SIGNING_SECRET")
+	if larkAppSecret == "" {
+		missingLark = append(missingLark, "LARK_APP_SECRET")
 	}
-	if slackChannel == "" {
-		missingSlack = append(missingSlack, "SLACK_CHANNEL")
+	if larkChatID == "" {
+		missingLark = append(missingLark, "LARK_CHAT_ID")
 	}
-	if len(missingSlack) > 0 {
-		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missingSlack, ", "))
+	if larkVerificationToken == "" {
+		missingLark = append(missingLark, "LARK_VERIFICATION_TOKEN")
+	}
+	if len(missingLark) > 0 {
+		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missingLark, ", "))
 	}
 
 	listenPort, err := envInt("GATEWAY_PORT", defaultGatewayPort)
@@ -103,10 +108,11 @@ func LoadConfig() (*Config, error) {
 		SessionTTL:         sessionTTL,
 		SessionLockTTL:     sessionLockTTL,
 		LockAcquireTimeout: lockAcquireTimeout,
-		SlackBotToken:      slackBotToken,
-		SlackSigningSecret: slackSigningSecret,
-		SlackChannel:       slackChannel,
-		SlackAPIBaseURL:    envString("SLACK_API_BASE_URL", slackAPIBaseURL),
+		LarkAppID:             larkAppID,
+		LarkAppSecret:         larkAppSecret,
+		LarkChatID:            larkChatID,
+		LarkVerificationToken: larkVerificationToken,
+		LarkAPIBaseURL:        envString("LARK_API_BASE_URL", larkAPIBaseURL),
 	}, nil
 }
 

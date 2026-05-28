@@ -10,14 +10,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mock-lark:
+        condition: service_started
     environment:
       GATEWAY_PORT: "8080"
       POLICY_FILE: policy.yaml
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
       REDIS_DSN: redis://redis:6379/0
-      SLACK_BOT_TOKEN: "xoxb-demo-token"
-      SLACK_SIGNING_SECRET: "demo-signing-secret"
-      SLACK_CHANNEL: "C-DEMO-APPROVALS"
+      LARK_APP_ID: "cli_demo_app_id"
+      LARK_APP_SECRET: "demo_app_secret"
+      LARK_CHAT_ID: "oc_demo_approvals"
+      LARK_VERIFICATION_TOKEN: "demo-verification-token"
+      LARK_API_BASE_URL: "http://mock-lark:8090/open-apis"
       SESSION_LOCK_TTL: "3s"
       LOCK_ACQUIRE_TIMEOUT: "5s"
       UPSTREAM_MCP_URL: http://fake-upstream:8081/mcp
@@ -25,6 +29,21 @@ services:
       - "18080:8080"
     volumes:
       - .:/workspace
+
+  mock-lark:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM golang:1.25-alpine
+        WORKDIR /app
+        COPY . .
+        RUN go build -o mock-lark ./examples/mock-lark
+        ENTRYPOINT ["./mock-lark"]
+    environment:
+      GATEWAY_URL: http://gateway:8080
+      LARK_VERIFICATION_TOKEN: "demo-verification-token"
+    ports:
+      - "18090:8090"
 
   fake-upstream:
     image: python:3.12-alpine
@@ -47,6 +66,8 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+    ports:
+      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
@@ -58,6 +79,8 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+    ports:
+      - "6379:6379"
 
   localstripe:
     build:
