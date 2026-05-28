@@ -103,12 +103,7 @@ echo "  [FAULT] Stopping mock-slack..."
 $COMPOSE stop mock-slack
 
 echo "  Running eval case: approval-timeout-slack-down (waiting up to 60s for timeout...)"
-EVAL_RESULT=$(timeout 90 bash -c '
-  POSTGRES_DSN="'"$POSTGRES_DSN"'" \
-  AGENT_URL="'"$AGENT_URL"'" \
-  EVAL_SKIP_COMPOSE=true \
-  go run ./cmd/eval-runner evalsuite/resilience.yaml 2>&1 || true
-')
+EVAL_RESULT=$(eval_run evalsuite/resilience.yaml)
 
 if echo "$EVAL_RESULT" | grep -q "\[PASS\] approval-timeout-slack-down"; then
   pass "Slack outage did not hang or panic — approval expired gracefully after 15s"
