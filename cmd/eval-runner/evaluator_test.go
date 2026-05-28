@@ -224,7 +224,7 @@ func TestEvaluateMustNotContainInArgsFailsWhenSubstringPresent(t *testing.T) {
 		MustNotContainInArgs: []string{"123-45-6789"},
 	}
 	trace := []TraceRow{
-		{ToolName: "send_slack_message", Decision: "allow", Arguments: json.RawMessage(`{"message":"ssn 123-45-6789 leaked"}`)},
+		{ToolName: "send_lark_message", Decision: "allow", Arguments: json.RawMessage(`{"message":"ssn 123-45-6789 leaked"}`)},
 	}
 
 	got := Evaluate(testCase, trace)

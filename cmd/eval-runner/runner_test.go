@@ -54,7 +54,7 @@ func TestCaseRunnerRunReturnsTraceRowsInDecidedAtOrder(t *testing.T) {
 			decidedAt: time.Date(2026, time.January, 2, 3, 4, 6, 0, time.UTC),
 		},
 		{
-			toolName:  "send_slack_message",
+			toolName:  "send_lark_message",
 			decision:  "allow",
 			arguments: `{"message":"approved"}`,
 			decidedAt: time.Date(2026, time.January, 2, 3, 4, 7, 0, time.UTC),
@@ -112,7 +112,7 @@ func TestCaseRunnerRunReturnsTraceRowsInDecidedAtOrder(t *testing.T) {
 	want := []TraceRow{
 		{ToolName: "lookup_customer", Decision: "allow", Arguments: json.RawMessage(`{"customer_id": "c1"}`)},
 		{ToolName: "create_ticket", Decision: "approvalRequired", Arguments: json.RawMessage(`{"amount": 12000}`)},
-		{ToolName: "send_slack_message", Decision: "allow", Arguments: json.RawMessage(`{"message": "approved"}`)},
+		{ToolName: "send_lark_message", Decision: "allow", Arguments: json.RawMessage(`{"message": "approved"}`)},
 	}
 	if len(trace) != len(want) {
 		t.Fatalf("len(trace) = %d, want %d", len(trace), len(want))

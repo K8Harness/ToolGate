@@ -94,7 +94,7 @@ func serve(suitePath string) error {
 		defaultAIAgentURL:    aiAgentURL,
 		defaultGatewayMCPURL: os.Getenv("GATEWAY_MCP_URL"),
 		mcpAddr:              os.Getenv("STACK_HEALTH_MCP_ADDR"),
-		larkURL:              os.Getenv("STACK_HEALTH_SLACK_URL"),
+		larkURL:              os.Getenv("STACK_HEALTH_LARK_URL"),
 		newRunner: func(agentURL string) caseExecutor {
 			return NewCaseRunner(agentURL, pool)
 		},
@@ -115,7 +115,7 @@ func serve(suitePath string) error {
 			return "http://localhost:18080/mcp"
 		}(),
 		mcpAddr: os.Getenv("STACK_HEALTH_MCP_ADDR"),
-		slackURL: os.Getenv("STACK_HEALTH_SLACK_URL"),
+		larkURL: os.Getenv("STACK_HEALTH_LARK_URL"),
 	}))
 
 	gatewayMCPURL := os.Getenv("GATEWAY_MCP_URL")

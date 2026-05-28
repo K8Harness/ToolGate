@@ -41,8 +41,8 @@ TOOLS = [
         },
     },
     {
-        "name": "send_slack_message",
-        "description": "Send a Slack message",
+        "name": "send_lark_message",
+        "description": "Send a Lark message",
         "inputSchema": {
             "type": "object",
             "properties": {

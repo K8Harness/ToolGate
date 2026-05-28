@@ -28,7 +28,7 @@ const mcpCrashSuiteYAML = `cases:
 `
 
 const approvalTimeoutSuiteYAML = `cases:
-  - name: approval-timeout-slack-down
+  - name: approval-timeout-lark-down
     input: >
       List recent charges for alice@example.com, then issue a full refund on
       the first non-refunded charge with reason requested_by_customer.

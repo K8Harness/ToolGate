@@ -21,7 +21,7 @@ services:
       LARK_APP_SECRET: ${LARK_APP_SECRET:-demo_app_secret}
       LARK_CHAT_ID: ${LARK_CHAT_ID:-oc_demo_approvals}
       LARK_VERIFICATION_TOKEN: ${LARK_VERIFICATION_TOKEN:-demo-verification-token}
-      LARK_API_BASE_URL: ${LARK_API_BASE_URL:-http://mock-lark:8090/open-apis}
+      LARK_API_BASE_URL: ${LARK_API_BASE_URL}
       SESSION_LOCK_TTL: "3s"
       LOCK_ACQUIRE_TIMEOUT: "5s"
       APPROVAL_TIMEOUT: "180s"

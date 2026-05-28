@@ -27,7 +27,7 @@ type stackHealthDeps struct {
 	httpClient *http.Client
 	gatewayURL string
 	mcpAddr    string
-	slackURL   string
+	larkURL    string
 }
 
 func makeStackHealthHandler(deps stackHealthDeps) http.HandlerFunc {
@@ -39,9 +39,9 @@ func makeStackHealthHandler(deps stackHealthDeps) http.HandlerFunc {
 	if mcpAddr == "" {
 		mcpAddr = "127.0.0.1:18421"
 	}
-	slackURL := deps.slackURL
-	if slackURL == "" {
-		slackURL = "http://localhost:18090/healthz"
+	larkURL := deps.larkURL
+	if larkURL == "" {
+		larkURL = "http://localhost:18090/healthz"
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -49,7 +49,7 @@ func makeStackHealthHandler(deps stackHealthDeps) http.HandlerFunc {
 			Services: []stackHealthService{
 				probeHTTPService(deps.httpClient, "Gateway", gatewayURL),
 				probeTCPService("MCP", mcpAddr),
-				probeHTTPService(deps.httpClient, "Lark", slackURL),
+				probeHTTPService(deps.httpClient, "Lark", larkURL),
 				probePostgresService(deps.pool),
 			},
 		})

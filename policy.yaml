@@ -13,7 +13,7 @@ rules:
     action: allow
   - tool: create_refund
     action: approvalRequired
-  - tool: send_slack_message
+  - tool: send_lark_message
     action: redact
     redactFields:
       - message

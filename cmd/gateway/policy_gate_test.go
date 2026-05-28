@@ -651,7 +651,7 @@ func TestPolicyGateHandlerRedactMasksFieldAndAuditsAllow(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"send_slack_message","arguments":{"message":"secret content","channel":"#general"}}`),
+		Params:  json.RawMessage(`{"name":"send_lark_message","arguments":{"message":"secret content","channel":"#general"}}`),
 	}
 
 	resp, err := handler.Handle(contextWithSessionAndTurn("session-redact", "turn-redact"), req)
@@ -725,7 +725,7 @@ func TestPolicyGateHandlerRedactSkipsMissingField(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"send_slack_message","arguments":{"channel":"#general"}}`),
+		Params:  json.RawMessage(`{"name":"send_lark_message","arguments":{"channel":"#general"}}`),
 	}
 
 	resp, err := handler.Handle(contextWithSessionAndTurn("session-redact-skip", "turn-redact-skip"), req)
