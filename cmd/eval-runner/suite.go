@@ -13,6 +13,7 @@ var allowedPolicyOutcomes = map[string]struct{}{
 	"deny":             {},
 	"approvalRequired": {},
 	"expired":          {},
+	"upstream_error":   {},
 }
 
 func LoadSuite(path string) (*EvalSuite, error) {
