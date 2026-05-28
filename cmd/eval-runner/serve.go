@@ -42,7 +42,10 @@ func serve(suitePath string) error {
 	}
 	defer db.Close()
 
-	pool, _ := db.(*pgxpool.Pool)
+	pool, ok := db.(*pgxpool.Pool)
+	if !ok {
+		return fmt.Errorf("database connection is not a *pgxpool.Pool")
+	}
 	runner := NewCaseRunner(cfg.AgentURL, pool)
 
 	// AI agent runner — optional, only active when AI_AGENT_URL is set
