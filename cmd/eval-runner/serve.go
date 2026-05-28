@@ -85,10 +85,31 @@ func serve(suitePath string) error {
 	})
 
 	http.HandleFunc("POST /run-eval/custom", makeCustomEvalHandler(pool))
+	http.HandleFunc("POST /run-eval/custom/stream", makeCustomEvalStreamHandler(func(agentURL string) caseExecutor {
+		return NewCaseRunner(agentURL, pool)
+	}))
+	http.HandleFunc("POST /run-scenario/stream", makeScenarioStreamHandler(scenarioDeps{
+		pool:                 pool,
+		defaultAgentURL:      cfg.AgentURL,
+		defaultGatewayMCPURL: os.Getenv("GATEWAY_MCP_URL"),
+		newRunner: func(agentURL string) caseExecutor {
+			return NewCaseRunner(agentURL, pool)
+		},
+		newRetryStorm: func(gatewayURL string) scenarioCaseExecutor {
+			return newRetryStormExecutor(gatewayURL, pool)
+		},
+	}))
 
 	http.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+	http.HandleFunc("GET /stack-health", makeStackHealthHandler(stackHealthDeps{pool: pool}))
+
+	gatewayMCPURL := os.Getenv("GATEWAY_MCP_URL")
+	if gatewayMCPURL == "" {
+		gatewayMCPURL = defaultGatewayMCPURL
+	}
+	go warmGatewayCapCache(gatewayMCPURL)
 
 	slog.Info("eval server listening", "port", port)
 	return http.ListenAndServe(":"+port, nil)
@@ -128,43 +149,18 @@ func makeEvalHandler(runner caseExecutor, suite *EvalSuite, _ *pgxpool.Pool) htt
 	return func(w http.ResponseWriter, r *http.Request) {
 		results := make([]CaseResult, 0, len(suite.Cases))
 		for _, testCase := range suite.Cases {
-			trace, err := runner.Run(r.Context(), testCase)
-			result := CaseResult{Name: testCase.Name}
-			if err != nil {
-				result.Failures = []CheckFailure{{
-					Check:    "run",
-					Expected: "case completes successfully",
-					Observed: err.Error(),
-				}}
-			} else {
-				result = Evaluate(testCase, trace)
-			}
-			results = append(results, result)
+			results = append(results, runEvalCase(r.Context(), runner, testCase))
 		}
 
-		passCount := 0
-		for _, r := range results {
-			if r.Passed {
-				passCount++
-			}
-		}
-
-		report := GenerateReport(results)
+		resp := summarizeResults(results)
 
 		if r.Header.Get("Accept") == "application/json" {
-			resp := evalResponse{
-				Passed:     passCount == len(results),
-				PassCount:  passCount,
-				TotalCount: len(results),
-				Cases:      results,
-				Report:     report,
-			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain")
-		_, _ = fmt.Fprint(w, report)
+		_, _ = fmt.Fprint(w, resp.Report)
 	}
 }
