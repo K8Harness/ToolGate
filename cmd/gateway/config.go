@@ -30,11 +30,12 @@ type Config struct {
 	SessionTTL         time.Duration
 	SessionLockTTL     time.Duration
 	LockAcquireTimeout time.Duration
-	LarkAppID             string // LARK_APP_ID             (required)
-	LarkAppSecret         string // LARK_APP_SECRET         (required)
-	LarkChatID            string // LARK_CHAT_ID            (required)
-	LarkVerificationToken string // LARK_VERIFICATION_TOKEN (required)
-	LarkAPIBaseURL        string // LARK_API_BASE_URL       (optional, default "https://open.feishu.cn/open-apis")
+	ApprovalLockTTL       time.Duration // APPROVAL_LOCK_TTL       (optional, default 5m)
+	LarkAppID             string        // LARK_APP_ID             (required)
+	LarkAppSecret         string        // LARK_APP_SECRET         (required)
+	LarkChatID            string        // LARK_CHAT_ID            (required)
+	LarkVerificationToken string        // LARK_VERIFICATION_TOKEN (required)
+	LarkAPIBaseURL        string        // LARK_API_BASE_URL       (optional, default "https://open.feishu.cn/open-apis")
 }
 
 func LoadConfig() (*Config, error) {
@@ -97,6 +98,11 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
+	approvalLockTTL, err := envDuration("APPROVAL_LOCK_TTL", 5*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Config{
 		ListenPort:         listenPort,
 		PolicyFilePath:     envStringWithInfoNotice("POLICY_FILE", defaultPolicyFilePath, "using default policy file path"),
@@ -108,6 +114,7 @@ func LoadConfig() (*Config, error) {
 		SessionTTL:         sessionTTL,
 		SessionLockTTL:     sessionLockTTL,
 		LockAcquireTimeout: lockAcquireTimeout,
+		ApprovalLockTTL:       approvalLockTTL,
 		LarkAppID:             larkAppID,
 		LarkAppSecret:         larkAppSecret,
 		LarkChatID:            larkChatID,

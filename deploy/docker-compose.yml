@@ -80,48 +80,6 @@ services:
     networks:
       - eval-gate
 
-  fake-stripe:
-    build:
-      context: ..
-      dockerfile: examples/fake-mcp-servers/stripe/Dockerfile
-    expose:
-      - "8082"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q -O /dev/null --header='Content-Type: application/json' --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0.0\"}}}' http://127.0.0.1:8082/mcp",
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 5s
-    networks:
-      - eval-gate
-
-  fake-upstream:
-    build:
-      context: ..
-      dockerfile_inline: |
-        FROM python:3.12-alpine
-        WORKDIR /app
-        COPY scripts/fake_upstream.py /app/fake_upstream.py
-        ENTRYPOINT ["python", "/app/fake_upstream.py"]
-    expose:
-      - "8081"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q -O /dev/null --header='Content-Type: application/json' --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"client\":\"healthcheck\"}}' http://127.0.0.1:8081/mcp",
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 5s
-    networks:
-      - eval-gate
-
   localstripe:
     build:
       context: ../localstripe_demo
@@ -174,37 +132,22 @@ services:
     networks:
       - eval-gate
 
-  fake-zendesk:
+  localstripe-seed:
     build:
-      context: ..
-      dockerfile: examples/fake-mcp-servers/zendesk/Dockerfile
-    expose:
-      - "8083"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q -O /dev/null --header='Content-Type: application/json' --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0.0\"}}}' http://127.0.0.1:8083/mcp",
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 5s
-    networks:
-      - eval-gate
-
-  fake-slack:
-    build:
-      context: ..
-      dockerfile: examples/fake-mcp-servers/slack/Dockerfile
-    expose:
-      - "8084"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8084/inspect"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 5s
+      context: ../localstripe_demo
+      dockerfile_inline: |
+        FROM python:3.12-alpine
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e ".[webapp]"
+        ENTRYPOINT ["localstripe-seed"]
+    depends_on:
+      localstripe:
+        condition: service_healthy
+    environment:
+      LOCALSTRIPE_URL: http://localstripe:8420
+      LOCALSTRIPE_API_KEY: sk_test_12345
+    restart: "no"
     networks:
       - eval-gate
 
@@ -257,6 +200,84 @@ services:
     networks:
       - eval-gate
 
+  eval-trigger:
+    build:
+      context: ../localstripe_demo
+      dockerfile_inline: |
+        FROM python:3.12-alpine
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e ".[agent]"
+        ENTRYPOINT ["localstripe-eval-trigger"]
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      MCP_URL: http://gateway:8080/mcp
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      TRIGGER_PORT: "8086"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s = socket.create_connection(('127.0.0.1', 8086), 2); s.close()",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    ports:
+      - "18086:8086"
+    networks:
+      - eval-gate
+
+  eval-server:
+    build:
+      context: ..
+      dockerfile_inline: |
+        FROM golang:1.25-alpine AS builder
+        WORKDIR /build
+        COPY go.mod go.sum ./
+        RUN go mod download
+        COPY . .
+        RUN CGO_ENABLED=0 GOOS=linux go build -o /eval-server ./cmd/eval-runner
+
+        FROM alpine:latest
+        WORKDIR /app
+        COPY --from=builder /eval-server /eval-server
+        COPY evalsuite/ /app/evalsuite/
+        ENTRYPOINT ["/eval-server", "--serve", "/app/evalsuite/default.yaml"]
+    depends_on:
+      gateway:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      support-agent:
+        condition: service_healthy
+      eval-trigger:
+        condition: service_healthy
+      localstripe-seed:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
+      AGENT_URL: http://support-agent:8085
+      AI_AGENT_URL: http://eval-trigger:8086
+      AI_SUITE_PATH: /app/evalsuite/ai-agent.yaml
+      EVAL_SERVE_PORT: "8099"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8099/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    ports:
+      - "18099:8099"
+    networks:
+      - eval-gate
+
   demo-webapp:
     build:
       context: ../localstripe_demo
@@ -281,25 +302,6 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
     ports:
       - "18422:8422"
-    networks:
-      - eval-gate
-
-  localstripe-refund-agent:
-    build:
-      context: ../localstripe_demo
-      dockerfile_inline: |
-        FROM python:3.12-alpine
-        WORKDIR /app
-        COPY . .
-        RUN pip install --no-cache-dir -e ".[agent]"
-        ENTRYPOINT ["localstripe-refund-agent"]
-    depends_on:
-      gateway:
-        condition: service_healthy
-    environment:
-      MCP_URL: http://gateway:8080/mcp
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
     networks:
       - eval-gate
 

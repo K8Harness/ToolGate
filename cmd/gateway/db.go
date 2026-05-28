@@ -18,11 +18,28 @@ var schemaStatements = []string{
 		tool_name   TEXT        NOT NULL,
 		arguments   JSONB       NOT NULL,
 		decision    TEXT        NOT NULL
-		            CHECK (decision IN ('allow', 'deny', 'approvalRequired', 'budgetExceeded')),
+		            CHECK (decision IN ('allow', 'deny', 'approvalRequired', 'budgetExceeded', 'upstream_error', 'expired')),
 		reason      TEXT,
 		decided_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
 	`CREATE INDEX IF NOT EXISTS audit_log_session_turn ON audit_log (session_id, turn_id)`,
+	// Repair: extend decision check constraint to include upstream_error and expired.
+	// Idempotent: no-op when constraint already covers the full set.
+	`DO $$
+DECLARE
+	cname TEXT;
+BEGIN
+	SELECT conname INTO cname
+	FROM pg_constraint
+	WHERE conrelid = 'audit_log'::regclass
+	  AND contype = 'c'
+	  AND pg_get_constraintdef(oid) NOT LIKE '%upstream_error%';
+	IF cname IS NOT NULL THEN
+		EXECUTE format('ALTER TABLE audit_log DROP CONSTRAINT %I', cname);
+		ALTER TABLE audit_log ADD CONSTRAINT audit_log_decision_check
+			CHECK (decision IN ('allow', 'deny', 'approvalRequired', 'budgetExceeded', 'upstream_error', 'expired'));
+	END IF;
+END $$`,
 	`CREATE TABLE IF NOT EXISTS ticket (
 		id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
 		session_id  TEXT        NOT NULL,

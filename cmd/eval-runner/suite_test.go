@@ -212,6 +212,25 @@ func TestLoadSuiteLoadsRepoDefaultFixtureFromRepoRoot(t *testing.T) {
 	}
 }
 
+func TestLoadSuiteAcceptsUpstreamErrorPolicyOutcome(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "suite.yaml")
+	writeTestFile(t, path, `
+cases:
+  - name: mcp-down
+    input: "Show me my recent charges."
+    mustInclude: [list_recent_charges]
+    policyOutcome: upstream_error
+`)
+	suite, err := LoadSuite(path)
+	if err != nil {
+		t.Fatalf("LoadSuite() error = %v, want nil", err)
+	}
+	if suite.Cases[0].PolicyOutcome != "upstream_error" {
+		t.Fatalf("PolicyOutcome = %q, want upstream_error", suite.Cases[0].PolicyOutcome)
+	}
+}
+
 func writeTestFile(t *testing.T, path string, contents string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(strings.TrimLeft(contents, "\n")), 0o600); err != nil {

@@ -212,6 +212,14 @@ func (h *PolicyGateHandler) Handle(ctx context.Context, req *mcp.JSONRPCRequest)
 		decision, err := h.bridge.WaitForDecision(ctx, ticketID, sessionID, turnID)
 		if errors.Is(err, ErrApprovalTimeout) {
 			h.log.Error("approval timed out", "ticketID", ticketID, "sessionID", sessionID, "turnID", turnID)
+			h.audit.Write(AuditRecord{
+				SessionID: sessionID,
+				TurnID:    turnID,
+				ToolName:  toolName,
+				Arguments: arguments,
+				Decision:  "expired",
+				Reason:    "approval timeout",
+			})
 			return approvalErrorResponse(req.ID, "approval timeout"), nil
 		}
 		if err != nil || !decision.Approved {

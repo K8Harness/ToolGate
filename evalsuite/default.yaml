@@ -1,24 +1,24 @@
 cases:
-  - name: small-refund-allow
-    input: small-refund
+  - name: lookup-allow
+    input: lookup-charge
     mustInclude:
-      - refund_small
+      - list_recent_charges
     policyOutcome: allow
 
-  - name: large-refund-approval
-    input: large-refund
+  - name: create-refund-approval
+    input: create-refund
     mustInclude:
-      - refund_large
+      - create_refund
     policyOutcome: approvalRequired
 
-  - name: delete-customer-deny
-    input: delete-customer
+  - name: deny-test
+    input: deny-test
     mustInclude:
-      - delete_record
+      - delete_customer
     policyOutcome: deny
 
-  - name: slack-pii-redact
-    input: slack-pii-message
+  - name: pii-redact
+    input: pii-message
     mustInclude:
       - send_slack_message
     policyOutcome: allow

@@ -1,0 +1,35 @@
+services:
+  gateway:
+    depends_on:
+      localstripe-mcp:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mock-slack:
+        condition: service_started
+    environment:
+      UPSTREAM_MCP_URL: http://localstripe-mcp:8421/mcp
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo -e \"GET /mcp HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n\" > /dev/tcp/127.0.0.1/8080' 2>/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  demo-webapp:
+    depends_on:
+      gateway:
+        condition: service_healthy
+      localstripe:
+        condition: service_healthy
+    environment:
+      MCP_URL: http://gateway:8080/mcp
+
+  eval-trigger:
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      MCP_URL: http://gateway:8080/mcp

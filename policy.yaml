@@ -1,14 +1,4 @@
 rules:
-  - tool: refund_small
-    action: allow
-  - tool: refund_large
-    action: approvalRequired
-  - tool: delete_record
-    action: deny
-  - tool: send_slack_message
-    action: redact
-    redactFields:
-      - message
   - tool: lookup_charge
     action: allow
   - tool: lookup_payment_intent
@@ -19,6 +9,10 @@ rules:
     action: allow
   - tool: create_refund
     action: approvalRequired
+  - tool: send_slack_message
+    action: redact
+    redactFields:
+      - message
 budgets:
   maxToolCallsPerTurn: 5
 defaultAction: deny
