@@ -34,7 +34,8 @@ type Server struct {
 	sessions     *SessionRegistry
 	mux          *http.ServeMux
 	log          *slog.Logger
-	audit        auditRecorder // nil-safe; set by buildGatewayServer
+	audit        auditRecorder    // nil-safe; set by buildGatewayServer
+	capCache     capabilityCache  // caches last good initialize/tools/list for upstream-down resilience
 }
 
 func NewServer(config *Config, pipeline *mcp.Pipeline, log *slog.Logger) *Server {
@@ -140,12 +141,21 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
+		if req.Method == "tools/list" {
+			if cached := s.capCache.getToolList(req.ID); cached != nil {
+				s.writeJSONResponse(w, cached)
+				return
+			}
+		}
 		s.errorResponse(w, req.ID, jsonRPCCode(err), err.Error())
 		return
 	}
 
 	if req.Method == "tools/call" {
 		NewRequestLogger(s.log).LogOutcome(r.Context(), req, resp, nil)
+	}
+	if req.Method == "tools/list" {
+		s.capCache.setToolList(resp)
 	}
 	s.writeJSONResponse(w, resp)
 }
@@ -246,9 +256,14 @@ func (s *Server) writeInitializeResponse(w http.ResponseWriter, ctx context.Cont
 
 	resp, err := s.forwarder.Handle(ctx, req)
 	if err != nil {
+		if cached := s.capCache.getInit(req.ID); cached != nil {
+			s.writeJSONResponse(w, cached)
+			return
+		}
 		s.errorResponse(w, req.ID, jsonRPCCode(err), err.Error())
 		return
 	}
+	s.capCache.setInit(resp)
 	s.writeJSONResponse(w, resp)
 }
 

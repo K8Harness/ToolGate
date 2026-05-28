@@ -26,3 +26,10 @@ services:
         condition: service_healthy
     environment:
       MCP_URL: http://gateway:8080/mcp
+
+  eval-trigger:
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      MCP_URL: http://gateway:8080/mcp
