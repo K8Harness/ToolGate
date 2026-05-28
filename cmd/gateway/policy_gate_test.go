@@ -583,12 +583,13 @@ func TestPolicyGateHandlerApprovalHoldBridgeErrorReturnsDenied(t *testing.T) {
 }
 
 func TestPolicyGateHandlerApprovalHoldTimeoutReturnsTimeoutError(t *testing.T) {
+	audit := &policyGateAuditStub{}
 	bridge := &mockApprovalBridge{err: ErrApprovalTimeout}
 	notifier := newMockSlackNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
 		NewBudgetTracker(),
-		&policyGateAuditStub{},
+		audit,
 		&policyGateTicketStub{},
 		&policyGateEvaluatorStub{decision: corepolicy.PolicyDecision{Action: corepolicy.ActionApprovalRequired}},
 		bridge,
@@ -609,6 +610,20 @@ func TestPolicyGateHandlerApprovalHoldTimeoutReturnsTimeoutError(t *testing.T) {
 	}
 	if resp.Error.Message != "approval timeout" {
 		t.Fatalf("error message = %q, want %q", resp.Error.Message, "approval timeout")
+	}
+
+	// Verify expired audit record written after the approvalRequired record.
+	var expiredRecord *AuditRecord
+	for i := range audit.records {
+		if audit.records[i].Decision == "expired" {
+			expiredRecord = &audit.records[i]
+		}
+	}
+	if expiredRecord == nil {
+		t.Fatalf("no expired audit record written; got records: %+v", audit.records)
+	}
+	if expiredRecord.SessionID != "session-timeout" {
+		t.Fatalf("expired record SessionID = %q, want session-timeout", expiredRecord.SessionID)
 	}
 }
 
