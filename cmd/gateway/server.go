@@ -121,9 +121,11 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	toolName := ""
+	var toolArguments json.RawMessage
 	if req.Method == "tools/call" {
-		if name, ok := toolNameFromParams(req.Params); ok {
+		if name, args, parseErr := parseToolCallParams(req.Params); parseErr == nil {
 			toolName = name
+			toolArguments = args
 		}
 	}
 
@@ -136,6 +138,7 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 					SessionID: sessionID,
 					TurnID:    mcp.TurnIDFromContext(r.Context()),
 					ToolName:  toolName,
+					Arguments: toolArguments,
 					Decision:  "upstream_error",
 					Reason:    err.Error(),
 				})
