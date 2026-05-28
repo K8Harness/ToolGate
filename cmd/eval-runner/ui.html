@@ -3,160 +3,630 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ToolGate Eval Runner</title>
+  <title>ToolGate Resilience Operator</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-50 min-h-screen p-6">
-  <div class="max-w-3xl mx-auto">
-    <h1 class="text-2xl font-bold text-gray-800 mb-6">ToolGate Eval Runner</h1>
-
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">
-
+<body class="min-h-screen bg-slate-100 p-4 text-slate-900 sm:p-6">
+  <div class="mx-auto max-w-6xl space-y-6">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Agent URL</label>
-        <input id="agentUrl" type="text" placeholder="http://localhost:8085"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        <p class="mt-1 text-xs text-gray-500">Base URL of the agent to evaluate (must expose a <code>/trigger</code> endpoint).</p>
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-sky-700">Operator Surface</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">ToolGate Resilience Demo</h1>
+        <p class="mt-2 max-w-2xl text-sm text-slate-600">
+          Choose a prepared scenario, stream case results as they complete, and inspect the audit trail behind each verdict.
+        </p>
       </div>
-
-      <div>
-        <div class="flex items-center justify-between mb-1">
-          <label class="block text-sm font-medium text-gray-700">Test Suite (YAML)</label>
-          <button id="loadExample" class="text-xs text-blue-600 hover:underline">Load example</button>
+      <div class="flex items-center gap-3">
+        <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-right shadow-sm">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Elapsed</div>
+          <div id="elapsedTimer" class="mt-1 font-mono text-2xl font-semibold text-slate-900">00:00</div>
         </div>
-        <textarea id="suiteYaml" rows="12" spellcheck="false"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="cases:&#10;  - name: my-test&#10;    input: lookup-charge&#10;    mustInclude:&#10;      - list_recent_charges&#10;    policyOutcome: allow"></textarea>
-      </div>
-
-      <button id="runBtn"
-        class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm">
-        Run Eval
-      </button>
-    </div>
-
-    <div id="resultsSection" class="hidden mt-6">
-      <div class="flex items-center justify-between mb-2">
-        <h2 class="text-lg font-semibold text-gray-800">Results</h2>
-        <span id="verdictBadge" class="text-sm font-bold px-3 py-1 rounded-full"></span>
-      </div>
-      <div id="resultsTable" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-4 py-2 font-medium text-gray-600">Case</th>
-              <th class="text-left px-4 py-2 font-medium text-gray-600">Status</th>
-              <th class="text-left px-4 py-2 font-medium text-gray-600">Failures</th>
-            </tr>
-          </thead>
-          <tbody id="resultsBody" class="divide-y divide-gray-100"></tbody>
-        </table>
+        <div id="verdictBadge" class="hidden rounded-full px-4 py-2 text-sm font-semibold"></div>
       </div>
     </div>
 
-    <div id="errorBox" class="hidden mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700 font-mono whitespace-pre-wrap"></div>
+    <div class="grid gap-6 xl:grid-cols-[1.3fr_0.9fr]">
+      <section class="space-y-6">
+        <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="mb-4 flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-slate-900">Scenarios</h2>
+              <p class="text-sm text-slate-500">Preset runs are server-owned. Custom YAML is a separate mode.</p>
+            </div>
+            <span id="modeBadge" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">Preset</span>
+          </div>
+          <div id="presetGrid" class="grid gap-3 md:grid-cols-3"></div>
+        </div>
+
+        <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="grid gap-4 md:grid-cols-2">
+            <div>
+              <label for="agentUrl" class="mb-1 block text-sm font-medium text-slate-700">Eval Agent URL</label>
+              <input id="agentUrl" type="text" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-mono text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-200" />
+              <p class="mt-1 text-xs text-slate-500">Required for YAML-backed presets and Custom YAML mode.</p>
+            </div>
+            <div>
+              <label for="gatewayMcpUrl" class="mb-1 block text-sm font-medium text-slate-700">Gateway MCP URL</label>
+              <input id="gatewayMcpUrl" type="text" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-mono text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-200" />
+              <p class="mt-1 text-xs text-slate-500">Used by the Retry Storm preset.</p>
+            </div>
+          </div>
+
+          <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Stack Health</h3>
+                <p class="text-xs text-slate-500">Expected outages should be visible before you run a scenario.</p>
+              </div>
+              <button id="refreshHealthBtn" class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100">Refresh Health</button>
+            </div>
+            <div id="stackHealth" class="flex flex-wrap gap-2"></div>
+          </div>
+
+          <div class="mt-5 flex flex-col gap-3 sm:flex-row">
+            <button id="runBtn" class="inline-flex flex-1 items-center justify-center rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60">Run Scenario</button>
+            <button id="customizeYaml" class="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Customize YAML</button>
+          </div>
+        </div>
+
+        <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="mb-3 flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-slate-900">Scenario Plan</h2>
+              <p id="planHint" class="text-sm text-slate-500">Preset plans are read-only. Switch to Custom YAML to edit.</p>
+            </div>
+            <button id="presetModeBtn" class="hidden rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100">Back To Preset</button>
+          </div>
+          <textarea id="scenarioPlan" rows="14" spellcheck="false" class="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-200" readonly></textarea>
+        </div>
+      </section>
+
+      <section class="space-y-6">
+        <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="mb-4 flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-slate-900">Results</h2>
+              <p class="text-sm text-slate-500">Rows update as streamed case events arrive.</p>
+            </div>
+          </div>
+          <div id="resultsBody" class="space-y-3"></div>
+        </div>
+
+        <div id="errorBox" class="hidden rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 shadow-sm"></div>
+      </section>
+    </div>
   </div>
 
   <script>
-    const EXAMPLE_YAML = `cases:
-  - name: lookup-allow
-    input: lookup-charge
+    const PRESETS = {
+      'mcp-crash': {
+        label: 'MCP Crash',
+        description: 'MCP is down; gateway returns clean upstream_error.',
+        mode: 'scenario',
+        agentUrl: 'http://127.0.0.1:18086',
+        caseNames: ['mcp-server-down'],
+        plan: `cases:
+  - name: mcp-server-down
+    input: "Show me my recent charges."
     mustInclude:
       - list_recent_charges
-    policyOutcome: allow
-
-  - name: create-refund-approval
-    input: create-refund
+    policyOutcome: upstream_error`
+      },
+      'retry-storm': {
+        label: 'Retry Storm',
+        description: 'Warm cache first, then let the budget limiter stop repeated calls.',
+        mode: 'scenario',
+        gatewayMcpUrl: 'http://localhost:18080/mcp',
+        caseNames: ['retry-storm-budget'],
+        readOnlyPlan: true,
+        plan: `Scenario plan:
+1. Warm gateway capability cache while MCP is healthy.
+2. Stop localstripe-mcp.
+3. Repeatedly call list_recent_charges in one turn.
+4. Pass when audit trace records budgetExceeded.`
+      },
+      'approval-timeout': {
+        label: 'Approval Timeout',
+        description: 'Slack is down; approvalRequired expires after demo TTL.',
+        mode: 'scenario',
+        agentUrl: 'http://127.0.0.1:18086',
+        caseNames: ['approval-timeout-slack-down'],
+        plan: `cases:
+  - name: approval-timeout-slack-down
+    input: >
+      List recent charges for alice@example.com, then issue a full refund on
+      the first non-refunded charge with reason requested_by_customer.
+      Do not ask for confirmation — proceed directly.
     mustInclude:
+      - list_recent_charges
       - create_refund
-    policyOutcome: approvalRequired`;
+    policyOutcome: expired`
+      }
+    };
 
-    document.getElementById('loadExample').addEventListener('click', () => {
-      document.getElementById('suiteYaml').value = EXAMPLE_YAML;
-    });
+    const CUSTOM_EXAMPLE_YAML = `cases:
+  - name: mcp-server-down
+    input: "Show me my recent charges."
+    mustInclude:
+      - list_recent_charges
+    policyOutcome: upstream_error
 
-    document.getElementById('runBtn').addEventListener('click', async () => {
-      const agentUrl = document.getElementById('agentUrl').value.trim();
-      const suite = document.getElementById('suiteYaml').value.trim();
-      const btn = document.getElementById('runBtn');
-      const resultsSection = document.getElementById('resultsSection');
-      const errorBox = document.getElementById('errorBox');
+  - name: approval-timeout-slack-down
+    input: >
+      List recent charges for alice@example.com, then issue a full refund on
+      the first non-refunded charge with reason requested_by_customer.
+      Do not ask for confirmation — proceed directly.
+    mustInclude:
+      - list_recent_charges
+      - create_refund
+    policyOutcome: expired`;
 
-      errorBox.classList.add('hidden');
-      resultsSection.classList.add('hidden');
+    const STATUS_CLASSES = {
+      QUEUED: 'bg-slate-100 text-slate-700',
+      RUNNING: 'bg-amber-100 text-amber-800',
+      PASS: 'bg-emerald-100 text-emerald-800',
+      FAIL: 'bg-rose-100 text-rose-800'
+    };
 
-      if (!agentUrl) { showError('Agent URL is required.'); return; }
-      if (!suite) { showError('Test suite YAML is required.'); return; }
+    const DECISION_CLASSES = {
+      allow: 'bg-green-100 text-green-700',
+      approvalRequired: 'bg-yellow-100 text-yellow-800',
+      expired: 'bg-gray-100 text-gray-700',
+      deny: 'bg-red-100 text-red-700',
+      upstream_error: 'bg-red-100 text-red-700',
+      budgetExceeded: 'bg-orange-100 text-orange-800'
+    };
 
-      btn.disabled = true;
-      btn.textContent = 'Running…';
+    const DEFAULT_DECISION_CLASS = 'bg-slate-100 text-slate-700';
+
+    let currentMode = 'scenario';
+    let selectedPresetId = 'mcp-crash';
+    let timerId = null;
+    let startedAt = null;
+    let healthTimerId = null;
+
+    const elements = {
+      agentUrl: document.getElementById('agentUrl'),
+      gatewayMcpUrl: document.getElementById('gatewayMcpUrl'),
+      scenarioPlan: document.getElementById('scenarioPlan'),
+      presetGrid: document.getElementById('presetGrid'),
+      runBtn: document.getElementById('runBtn'),
+      customizeYaml: document.getElementById('customizeYaml'),
+      presetModeBtn: document.getElementById('presetModeBtn'),
+      modeBadge: document.getElementById('modeBadge'),
+      planHint: document.getElementById('planHint'),
+      resultsBody: document.getElementById('resultsBody'),
+      verdictBadge: document.getElementById('verdictBadge'),
+      elapsedTimer: document.getElementById('elapsedTimer'),
+      errorBox: document.getElementById('errorBox'),
+      stackHealth: document.getElementById('stackHealth'),
+      refreshHealthBtn: document.getElementById('refreshHealthBtn')
+    };
+
+    init();
+
+    function init() {
+      renderPresetCards();
+      selectPreset(selectedPresetId);
+      setRunning(false);
+      elements.runBtn.addEventListener('click', runCurrentSelection);
+      elements.customizeYaml.addEventListener('click', enterCustomMode);
+      elements.presetModeBtn.addEventListener('click', () => selectPreset(selectedPresetId));
+      elements.refreshHealthBtn.addEventListener('click', refreshStackHealth);
+      refreshStackHealth();
+      healthTimerId = window.setInterval(refreshStackHealth, 5000);
+    }
+
+    function renderPresetCards() {
+      elements.presetGrid.innerHTML = '';
+      for (const [id, preset] of Object.entries(PRESETS)) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.presetId = id;
+        button.className = 'rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-sky-400 hover:bg-sky-50';
+        button.addEventListener('click', () => selectPreset(id));
+
+        const title = document.createElement('div');
+        title.className = 'text-sm font-semibold text-slate-900';
+        title.textContent = preset.label;
+
+        const description = document.createElement('p');
+        description.className = 'mt-2 text-sm text-slate-600';
+        description.textContent = preset.description;
+
+        button.appendChild(title);
+        button.appendChild(description);
+        elements.presetGrid.appendChild(button);
+      }
+    }
+
+    function selectPreset(id) {
+      const preset = PRESETS[id];
+      if (!preset) return;
+
+      currentMode = 'scenario';
+      selectedPresetId = id;
+      hideError();
+
+      document.querySelectorAll('[data-preset-id]').forEach(card => {
+        const selected = card.dataset.presetId === id;
+        card.classList.toggle('border-sky-500', selected);
+        card.classList.toggle('bg-sky-50', selected);
+      });
+
+      if (preset.agentUrl) elements.agentUrl.value = preset.agentUrl;
+      if (preset.gatewayMcpUrl) elements.gatewayMcpUrl.value = preset.gatewayMcpUrl;
+
+      elements.scenarioPlan.value = preset.plan;
+      elements.scenarioPlan.readOnly = true;
+      elements.scenarioPlan.disabled = true;
+      elements.modeBadge.textContent = 'Preset';
+      elements.planHint.textContent = preset.readOnlyPlan
+        ? 'This scenario is built-in and read-only.'
+        : 'Preset plans are read-only. Use Customize YAML to edit a copy.';
+      elements.customizeYaml.disabled = preset.readOnlyPlan === true;
+      elements.presetModeBtn.classList.add('hidden');
+
+      clearResults();
+      createQueuedRows(preset.caseNames || []);
+      refreshStackHealth();
+    }
+
+    function enterCustomMode() {
+      const preset = PRESETS[selectedPresetId];
+      if (preset && preset.readOnlyPlan) {
+        showError('Retry Storm uses a built-in scenario plan and cannot be edited as YAML.');
+        return;
+      }
+
+      currentMode = 'custom';
+      hideError();
+      elements.modeBadge.textContent = 'Custom YAML';
+      elements.planHint.textContent = 'Custom YAML runs through /run-eval/custom/stream.';
+      elements.presetModeBtn.classList.remove('hidden');
+      elements.scenarioPlan.readOnly = false;
+      elements.scenarioPlan.disabled = false;
+      if (!elements.scenarioPlan.value.trim()) {
+        elements.scenarioPlan.value = CUSTOM_EXAMPLE_YAML;
+      }
+      elements.scenarioPlan.focus();
+      clearResults();
+    }
+
+    function absoluteURL(value) {
+      try {
+        const parsed = new URL(value);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    }
+
+    function validateRunInputs() {
+      if (currentMode === 'custom') {
+        if (!absoluteURL(elements.agentUrl.value.trim())) {
+          return 'Agent URL must be an absolute HTTP URL.';
+        }
+        if (!elements.scenarioPlan.value.trim()) {
+          return 'Custom YAML is required.';
+        }
+        return '';
+      }
+
+      if (selectedPresetId === 'retry-storm') {
+        if (!absoluteURL(elements.gatewayMcpUrl.value.trim())) {
+          return 'Gateway MCP URL must be an absolute HTTP URL.';
+        }
+        return '';
+      }
+
+      if (!absoluteURL(elements.agentUrl.value.trim())) {
+        return 'Agent URL must be an absolute HTTP URL.';
+      }
+      return '';
+    }
+
+    function buildRunRequest() {
+      if (currentMode === 'custom') {
+        return {
+          url: '/run-eval/custom/stream',
+          body: {
+            agent_url: elements.agentUrl.value.trim(),
+            suite: elements.scenarioPlan.value.trim()
+          }
+        };
+      }
+
+      return {
+        url: '/run-scenario/stream',
+        body: {
+          scenario_id: selectedPresetId,
+          agent_url: elements.agentUrl.value.trim(),
+          gateway_mcp_url: elements.gatewayMcpUrl.value.trim()
+        }
+      };
+    }
+
+    async function runCurrentSelection() {
+      const validation = validateRunInputs();
+      if (validation) {
+        showError(validation);
+        return;
+      }
+
+      hideError();
+      setRunning(true);
+      elements.elapsedTimer.textContent = '00:00';
+      clearResults();
+      if (currentMode === 'scenario') {
+        createQueuedRows(PRESETS[selectedPresetId].caseNames || []);
+      }
+      startTimer();
 
       try {
-        const resp = await fetch('/run-eval/custom', {
+        const { url, body } = buildRunRequest();
+        const resp = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ suite, agent_url: agentUrl }),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+          },
+          body: JSON.stringify(body)
         });
-
         if (!resp.ok) {
-          const text = await resp.text();
-          showError(`HTTP ${resp.status}: ${text}`);
-          return;
+          throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
         }
-
-        const data = await resp.json();
-        renderResults(data);
+        await readSSE(resp, handleStreamEvent);
       } catch (err) {
         showError(String(err));
       } finally {
-        btn.disabled = false;
-        btn.textContent = 'Run Eval';
+        stopTimer();
+        setRunning(false);
       }
-    });
-
-    function renderResults(data) {
-      const tbody = document.getElementById('resultsBody');
-      tbody.innerHTML = '';
-
-      for (const c of data.cases) {
-        const tr = document.createElement('tr');
-
-        const failureText = c.failures
-          ? c.failures.map(f => `${f.check}: expected "${f.expected}", got "${f.observed}"`).join('\n')
-          : '';
-
-        tr.innerHTML = `
-          <td class="px-4 py-2 font-mono text-gray-800">${esc(c.name)}</td>
-          <td class="px-4 py-2">
-            <span class="px-2 py-0.5 rounded-full text-xs font-bold ${c.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
-              ${c.passed ? 'PASS' : 'FAIL'}
-            </span>
-          </td>
-          <td class="px-4 py-2 text-xs text-gray-500 font-mono whitespace-pre">${esc(failureText)}</td>
-        `;
-        tbody.appendChild(tr);
-      }
-
-      const badge = document.getElementById('verdictBadge');
-      if (data.passed) {
-        badge.textContent = `${data.pass_count}/${data.total_count} PASS`;
-        badge.className = 'text-sm font-bold px-3 py-1 rounded-full bg-green-100 text-green-700';
-      } else {
-        badge.textContent = `${data.pass_count}/${data.total_count} FAIL`;
-        badge.className = 'text-sm font-bold px-3 py-1 rounded-full bg-red-100 text-red-700';
-      }
-
-      document.getElementById('resultsSection').classList.remove('hidden');
     }
 
-    function showError(msg) {
-      const box = document.getElementById('errorBox');
-      box.textContent = msg;
-      box.classList.remove('hidden');
+    function startTimer() {
+      stopTimer();
+      startedAt = Date.now();
+      updateTimer();
+      timerId = window.setInterval(updateTimer, 1000);
     }
 
-    function esc(str) {
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    function stopTimer() {
+      if (timerId) {
+        window.clearInterval(timerId);
+        timerId = null;
+      }
+    }
+
+    function updateTimer() {
+      if (!startedAt) return;
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+      const seconds = String(elapsed % 60).padStart(2, '0');
+      elements.elapsedTimer.textContent = `${minutes}:${seconds}`;
+    }
+
+    async function readSSE(resp, onEvent) {
+      if (!resp.body) {
+        throw new Error('Streaming response body unavailable.');
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let boundary = buffer.indexOf('\n\n');
+        while (boundary >= 0) {
+          const frame = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const parsed = parseSSEFrame(frame);
+          if (parsed) onEvent(parsed.event, parsed.data);
+          boundary = buffer.indexOf('\n\n');
+        }
+      }
+    }
+
+    function parseSSEFrame(frame) {
+      const lines = frame.split('\n');
+      let event = '';
+      const dataLines = [];
+      for (const line of lines) {
+        if (line.startsWith('event:')) {
+          event = line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+          dataLines.push(line.slice(5).trim());
+        }
+      }
+      if (!event || dataLines.length === 0) {
+        return null;
+      }
+      return {
+        event,
+        data: JSON.parse(dataLines.join('\n'))
+      };
+    }
+
+    function handleStreamEvent(event, data) {
+      if (event === 'case_start') {
+        ensureCaseRow(data.name, 'RUNNING');
+        return;
+      }
+
+      if (event === 'case_result') {
+        renderCaseResult(data.result);
+        return;
+      }
+
+      if (event === 'summary') {
+        renderVerdict(data);
+      }
+    }
+
+    function clearResults() {
+      elements.resultsBody.innerHTML = '';
+      elements.verdictBadge.className = 'hidden';
+      elements.verdictBadge.textContent = '';
+    }
+
+    function createQueuedRows(caseNames) {
+      for (const name of caseNames) {
+        ensureCaseRow(name, 'QUEUED');
+      }
+    }
+
+    function ensureCaseRow(name, status) {
+      let row = document.querySelector(`[data-case-row="${cssEscape(name)}"]`);
+      if (!row) {
+        row = document.createElement('article');
+        row.dataset.caseRow = name;
+        row.className = 'rounded-2xl border border-slate-200 bg-slate-50 p-4';
+
+        const header = document.createElement('div');
+        header.className = 'flex items-start justify-between gap-3';
+
+        const title = document.createElement('div');
+        title.className = 'font-mono text-sm font-semibold text-slate-900';
+        title.textContent = name;
+
+        const badge = document.createElement('span');
+        badge.dataset.role = 'status';
+        badge.className = 'rounded-full px-2.5 py-1 text-xs font-semibold';
+
+        header.appendChild(title);
+        header.appendChild(badge);
+        row.appendChild(header);
+
+        const failures = document.createElement('pre');
+        failures.dataset.role = 'failures';
+        failures.className = 'mt-3 hidden whitespace-pre-wrap rounded-xl bg-white p-3 text-xs text-rose-700';
+        row.appendChild(failures);
+
+        const trace = document.createElement('div');
+        trace.dataset.role = 'trace';
+        trace.className = 'mt-3 flex flex-wrap gap-2';
+        row.appendChild(trace);
+
+        elements.resultsBody.appendChild(row);
+      }
+
+      setRowStatus(row, status);
+      return row;
+    }
+
+    function setRowStatus(row, status) {
+      const badge = row.querySelector('[data-role="status"]');
+      badge.textContent = status;
+      badge.className = `rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_CLASSES[status] || STATUS_CLASSES.QUEUED}`;
+    }
+
+    function renderCaseResult(result) {
+      const row = ensureCaseRow(result.name, result.passed ? 'PASS' : 'FAIL');
+      renderFailures(row, result.failures || []);
+      renderTrace(row, result.trace || []);
+    }
+
+    function renderFailures(row, failures) {
+      const failuresEl = row.querySelector('[data-role="failures"]');
+      if (!failures.length) {
+        failuresEl.classList.add('hidden');
+        failuresEl.textContent = '';
+        return;
+      }
+      failuresEl.textContent = failures.map(f => `${f.check}: expected "${f.expected}", got "${f.observed}"`).join('\n');
+      failuresEl.classList.remove('hidden');
+    }
+
+    function renderTrace(row, trace) {
+      const traceEl = row.querySelector('[data-role="trace"]');
+      traceEl.innerHTML = '';
+
+      if (!trace.length) {
+        const empty = document.createElement('span');
+        empty.className = 'text-xs text-slate-500';
+        empty.textContent = 'no audit trace';
+        traceEl.appendChild(empty);
+        return;
+      }
+
+      for (const item of trace) {
+        const badge = document.createElement('span');
+        const decisionClass = DECISION_CLASSES[item.decision] || DEFAULT_DECISION_CLASS;
+        badge.className = `rounded-full px-2.5 py-1 text-xs font-medium ${decisionClass}`;
+        badge.textContent = `${item.tool_name || '(unknown tool)'} -> ${item.decision || '(unknown)'}`;
+        traceEl.appendChild(badge);
+      }
+    }
+
+    function renderVerdict(data) {
+      elements.verdictBadge.className = data.passed
+        ? 'rounded-full bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-800'
+        : 'rounded-full bg-rose-100 px-4 py-2 text-sm font-semibold text-rose-800';
+      elements.verdictBadge.textContent = `${data.pass_count}/${data.total_count} ${data.passed ? 'PASS' : 'FAIL'}`;
+    }
+
+    function setRunning(running) {
+      elements.runBtn.disabled = running;
+      elements.customizeYaml.disabled = running || PRESETS[selectedPresetId].readOnlyPlan === true;
+      elements.presetModeBtn.disabled = running;
+      elements.refreshHealthBtn.disabled = running;
+      document.querySelectorAll('[data-preset-id]').forEach(card => {
+        card.disabled = running;
+      });
+      elements.agentUrl.disabled = running;
+      elements.gatewayMcpUrl.disabled = running;
+      elements.scenarioPlan.disabled = running || currentMode !== 'custom';
+      elements.runBtn.textContent = running ? 'Running...' : 'Run Scenario';
+    }
+
+    async function refreshStackHealth() {
+      try {
+        const resp = await fetch('/stack-health', { headers: { 'Accept': 'application/json' } });
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        renderStackHealth(data.services || []);
+      } catch (err) {
+        renderStackHealth([{ name: 'Stack', status: 'unknown', detail: String(err) }]);
+      }
+    }
+
+    function renderStackHealth(services) {
+      elements.stackHealth.innerHTML = '';
+      for (const service of services) {
+        const pill = document.createElement('span');
+        let className = 'bg-slate-100 text-slate-700';
+        if (service.status === 'up') className = 'bg-emerald-100 text-emerald-800';
+        if (service.status === 'down') className = 'bg-rose-100 text-rose-800';
+        pill.className = `inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${className}`;
+        pill.textContent = `${service.name} ${service.status}`;
+        if (service.detail) {
+          pill.title = service.detail;
+        }
+        elements.stackHealth.appendChild(pill);
+      }
+    }
+
+    function showError(message) {
+      elements.errorBox.textContent = message;
+      elements.errorBox.classList.remove('hidden');
+    }
+
+    function hideError() {
+      elements.errorBox.textContent = '';
+      elements.errorBox.classList.add('hidden');
+    }
+
+    function cssEscape(value) {
+      if (window.CSS && typeof window.CSS.escape === 'function') {
+        return window.CSS.escape(value);
+      }
+      return value.replace(/"/g, '\\"');
     }
   </script>
 </body>

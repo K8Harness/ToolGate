@@ -3,7 +3,7 @@ package main
 import "strings"
 
 func Evaluate(c EvalCase, trace []TraceRow) CaseResult {
-	result := CaseResult{Name: c.Name}
+	result := CaseResult{Name: c.Name, Trace: trace}
 	failures := make([]CheckFailure, 0)
 
 	failures = append(failures, evaluateMustInclude(c.MustInclude, trace)...)
