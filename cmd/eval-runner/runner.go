@@ -31,12 +31,39 @@ func NewCaseRunner(agentBaseURL string, db *pgxpool.Pool) *CaseRunner {
 	}
 }
 
+const auditPollInterval = 300 * time.Millisecond
+const auditPollTimeout = 30 * time.Second
+
 func (r *CaseRunner) Run(ctx context.Context, c EvalCase) ([]TraceRow, error) {
 	sessionID, err := r.trigger(ctx, c.Input)
 	if err != nil {
 		return nil, err
 	}
 
+	// AuditWriter is async. Poll until the last row's decision matches the
+	// expected policyOutcome (or until timeout). This avoids returning before
+	// the terminal record (e.g. upstream_error written after allow) is flushed.
+	deadline := time.Now().Add(auditPollTimeout)
+	for {
+		trace, err := r.queryTrace(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
+		if len(trace) > 0 && trace[len(trace)-1].Decision == c.PolicyOutcome {
+			return trace, nil
+		}
+		if time.Now().After(deadline) {
+			return trace, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(auditPollInterval):
+		}
+	}
+}
+
+func (r *CaseRunner) queryTrace(ctx context.Context, sessionID string) ([]TraceRow, error) {
 	rows, err := r.DB.Query(
 		ctx,
 		`SELECT tool_name, decision, arguments
