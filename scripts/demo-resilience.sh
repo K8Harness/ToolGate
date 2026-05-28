@@ -26,6 +26,20 @@ section "Starting full stack"
 $COMPOSE up -d --wait
 echo "  Stack healthy"
 
+# Warm the gateway's capability cache (initialize + tools/list) while all services
+# are healthy so it can serve cached responses when localstripe-mcp is stopped.
+WARMUP_SESSION=$(curl -s -D - -X POST "$GATEWAY_URL/mcp" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"warmup","version":"1.0"}}}' \
+  | grep -i "^Mcp-Session-Id:" | awk '{print $2}' | tr -d '\r\n')
+if [ -n "$WARMUP_SESSION" ]; then
+  curl -s -X POST "$GATEWAY_URL/mcp" \
+    -H "Content-Type: application/json" \
+    -H "Mcp-Session-Id: $WARMUP_SESSION" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' > /dev/null
+  echo "  Gateway capability cache warmed (session $WARMUP_SESSION)"
+fi
+
 # ─── Scenario 1: MCP server crash ─────────────────────────────────────────────
 section "SCENARIO 1 — MCP Server Crash (proxy resilience + eval gate)"
 echo "  [FAULT] Stopping localstripe-mcp..."
