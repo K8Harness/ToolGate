@@ -17,14 +17,14 @@ services:
       POLICY_FILE: policy.yaml
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
       REDIS_DSN: redis://redis:6379/0
-      LARK_APP_ID: "cli_demo_app_id"
-      LARK_APP_SECRET: "demo_app_secret"
-      LARK_CHAT_ID: "oc_demo_approvals"
-      LARK_VERIFICATION_TOKEN: "demo-verification-token"
-      LARK_API_BASE_URL: "http://mock-lark:8090/open-apis"
+      LARK_APP_ID: ${LARK_APP_ID:-cli_demo_app_id}
+      LARK_APP_SECRET: ${LARK_APP_SECRET:-demo_app_secret}
+      LARK_CHAT_ID: ${LARK_CHAT_ID:-oc_demo_approvals}
+      LARK_VERIFICATION_TOKEN: ${LARK_VERIFICATION_TOKEN:-demo-verification-token}
+      LARK_API_BASE_URL: ${LARK_API_BASE_URL:-http://mock-lark:8090/open-apis}
       SESSION_LOCK_TTL: "3s"
       LOCK_ACQUIRE_TIMEOUT: "5s"
-      APPROVAL_TIMEOUT: "25s"
+      APPROVAL_TIMEOUT: "180s"
       UPSTREAM_MCP_URL: http://fake-upstream:8081/mcp
     ports:
       - "18080:8080"
@@ -68,7 +68,7 @@ services:
       retries: 12
       start_period: 5s
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
@@ -81,7 +81,7 @@ services:
       retries: 12
       start_period: 5s
     ports:
-      - "6379:6379"
+      - "16379:6379"
 
   localstripe:
     build:
@@ -130,6 +130,31 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
+
+  eval-trigger:
+    build:
+      context: ./localstripe_demo
+      dockerfile_inline: |
+        FROM python:3.12-alpine
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e ".[agent]"
+        ENTRYPOINT ["localstripe-eval-trigger"]
+    depends_on:
+      localstripe-mcp:
+        condition: service_healthy
+    environment:
+      MCP_URL: http://localstripe-mcp:8421/mcp
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+    ports:
+      - "18086:8086"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8086"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
 
   demo-webapp:
     build:

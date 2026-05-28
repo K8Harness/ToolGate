@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 const (
@@ -37,7 +38,7 @@ type LarkClient struct {
 
 // NewLarkClient constructs a production-ready LarkClient.
 func NewLarkClient(appID, appSecret, chatID, baseURL string, log *slog.Logger) *LarkClient {
-	return newLarkClientWithHTTP(appID, appSecret, chatID, baseURL, &http.Client{}, log)
+	return newLarkClientWithHTTP(appID, appSecret, chatID, baseURL, &http.Client{Timeout: 15 * time.Second}, log)
 }
 
 // newLarkClientWithHTTP constructs a LarkClient with an injected HTTP client (used in tests).
@@ -224,8 +225,10 @@ func (c *LarkClient) SendApprovalRequest(ctx context.Context, ticketID string, t
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("lark notifier: unexpected status %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("lark notifier: unexpected status %d: %s", resp.StatusCode, body)
 	}
+	c.log.Info("lark approval card sent", "ticketID", ticketID, "chatID", c.chatID)
 	return nil
 }
 

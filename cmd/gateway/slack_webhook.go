@@ -281,9 +281,9 @@ func (h *LarkWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
+	h.log.Info("lark webhook: decision recorded", "ticketID", ticketID, "status", status, "userID", userID)
+
 	// Step 9: Return HTTP 200 with an empty JSON body.
-	// Lark requires a JSON response body for interactive card callbacks;
-	// an empty HTTP body triggers error 200671 ("please try again") in the chat.
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{}`))
