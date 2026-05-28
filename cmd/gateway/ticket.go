@@ -33,7 +33,7 @@ func NewTicketStore(pool *pgxpool.Pool) *TicketStore {
 }
 
 // UpdateStatus transitions a ticket from pending to a terminal status.
-// decidedBy is the Slack user ID for approve/deny; empty string for system-triggered (expired).
+// decidedBy is the Lark open_id for approve/deny; empty string for system-triggered (expired).
 // Implementation is idempotent: only updates if current status = 'pending'.
 func (s *TicketStore) UpdateStatus(ctx context.Context, id, status, decidedBy string) error {
 	_, err := s.pool.Exec(ctx, ticketUpdateStatusSQL, id, status, decidedBy)

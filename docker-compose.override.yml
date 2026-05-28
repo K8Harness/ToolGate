@@ -7,8 +7,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      mock-slack:
-        condition: service_started
     environment:
       UPSTREAM_MCP_URL: http://localstripe-mcp:8421/mcp
     healthcheck:

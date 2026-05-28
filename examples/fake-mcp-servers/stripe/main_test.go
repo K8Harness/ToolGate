@@ -56,7 +56,7 @@ func TestSendSlackMessageHandler(t *testing.T) {
 	}
 
 	payload := extractPayload(t, result)
-	if got, want := payload["tool"], "send_slack_message"; got != want {
+	if got, want := payload["tool"], "send_lark_message"; got != want {
 		t.Fatalf("payload tool = %v, want %q", got, want)
 	}
 	if got, want := payload["message"], "***REDACTED***"; got != want {

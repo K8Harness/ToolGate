@@ -10,3 +10,4 @@ cases:
     mustInclude:
       - list_recent_charges
       - create_refund
+    policyOutcome: approvalRequired

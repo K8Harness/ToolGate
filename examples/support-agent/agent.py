@@ -11,7 +11,7 @@ DISPATCH = {
     "lookup-charge":  ("list_recent_charges",  {"limit": 1}),
     "create-refund":  ("create_refund",         {"charge_or_pi": "ch_fake_001", "reason": "requested_by_customer"}),
     "deny-test":      ("delete_customer",       {"customer_id": "cust_001"}),
-    "pii-message":    ("send_slack_message",    {"channel": "#support", "message": "Customer SSN: 123-45-6789"}),
+    "pii-message":    ("send_lark_message",    {"channel": "#support", "message": "Customer SSN: 123-45-6789"}),
 }
 
 

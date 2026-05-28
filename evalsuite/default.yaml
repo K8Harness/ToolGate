@@ -20,7 +20,7 @@ cases:
   - name: pii-redact
     input: pii-message
     mustInclude:
-      - send_slack_message
+      - send_lark_message
     policyOutcome: allow
     mustNotContainInArgs:
       - "123-45-6789"

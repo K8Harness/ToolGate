@@ -2,7 +2,7 @@ services:
   gateway:
     image: debian:bookworm-slim
     working_dir: /workspace
-    command: ["/workspace/.compose-bin/gateway"]
+    command: ["sh", "-c", "apt-get update -qq && apt-get install -y -qq ca-certificates > /dev/null 2>&1 && /workspace/.compose-bin/gateway"]
     depends_on:
       fake-upstream:
         condition: service_started
@@ -10,23 +10,41 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mock-lark:
+        condition: service_started
     environment:
       GATEWAY_PORT: "8080"
       POLICY_FILE: policy.yaml
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
       REDIS_DSN: redis://redis:6379/0
-      SLACK_BOT_TOKEN: "xoxb-demo-token"
-      SLACK_SIGNING_SECRET: "demo-signing-secret"
-      SLACK_CHANNEL: "C-DEMO-APPROVALS"
-      SLACK_API_BASE_URL: "http://mock-slack:8090/api"
+      LARK_APP_ID: ${LARK_APP_ID:-cli_demo_app_id}
+      LARK_APP_SECRET: ${LARK_APP_SECRET:-demo_app_secret}
+      LARK_CHAT_ID: ${LARK_CHAT_ID:-oc_demo_approvals}
+      LARK_VERIFICATION_TOKEN: ${LARK_VERIFICATION_TOKEN:-demo-verification-token}
+      LARK_API_BASE_URL: ${LARK_API_BASE_URL}
       SESSION_LOCK_TTL: "3s"
       LOCK_ACQUIRE_TIMEOUT: "5s"
-      APPROVAL_LOCK_TTL: "15s"
+      APPROVAL_TIMEOUT: "180s"
       UPSTREAM_MCP_URL: http://fake-upstream:8081/mcp
     ports:
       - "18080:8080"
     volumes:
       - .:/workspace
+
+  mock-lark:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM golang:1.25-alpine
+        WORKDIR /app
+        COPY . .
+        RUN go build -o mock-lark ./examples/mock-lark
+        ENTRYPOINT ["./mock-lark"]
+    environment:
+      GATEWAY_URL: http://gateway:8080
+      LARK_VERIFICATION_TOKEN: "demo-verification-token"
+    ports:
+      - "18090:8090"
 
   fake-upstream:
     image: python:3.12-alpine
@@ -62,6 +80,8 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+    ports:
+      - "16379:6379"
 
   localstripe:
     build:
@@ -135,22 +155,6 @@ services:
       timeout: 3s
       retries: 15
       start_period: 10s
-
-  mock-slack:
-    build:
-      context: .
-      dockerfile: examples/mock-slack/Dockerfile
-    environment:
-      GATEWAY_URL: http://gateway:8080
-      SLACK_SIGNING_SECRET: "demo-signing-secret"
-    ports:
-      - "18090:8090"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8090/healthz 2>/dev/null || exit 0"]
-      interval: 5s
-      timeout: 5s
-      retries: 6
-      start_period: 5s
 
   demo-webapp:
     build:

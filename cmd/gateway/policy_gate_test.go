@@ -142,7 +142,7 @@ func TestPolicyGateHandlerApprovalRequiredInsertsTicketAndCallsBridge(t *testing
 	audit := &policyGateAuditStub{}
 	tickets := &policyGateTicketStub{}
 	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: true, TicketID: "ticket-1"}}
-	notifier := newMockSlackNotifier(nil)
+	notifier := newMockApprovalNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
 		NewBudgetTracker(),
@@ -190,7 +190,7 @@ func TestPolicyGateHandlerApprovalRequiredInsertsTicketAndCallsBridge(t *testing
 func TestPolicyGateHandlerApprovalRequiredLogsTicketInsertFailureAndContinuesHold(t *testing.T) {
 	var buf bytes.Buffer
 	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: true, TicketID: ""}}
-	notifier := newMockSlackNotifier(nil)
+	notifier := newMockApprovalNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
 		NewBudgetTracker(),
@@ -358,7 +358,7 @@ type policyGateEvaluatorStub struct {
 	decision corepolicy.PolicyDecision
 }
 
-func (s *policyGateEvaluatorStub) Evaluate(policy *corepolicy.AgentPolicy, toolName string) corepolicy.PolicyDecision {
+func (s *policyGateEvaluatorStub) Evaluate(policy *corepolicy.AgentPolicy, toolName string, args json.RawMessage) corepolicy.PolicyDecision {
 	s.calls++
 	s.toolName = toolName
 	return s.decision
@@ -382,7 +382,7 @@ func nowStub(now time.Time) func() time.Time {
 func TestPolicyGateHandlerApprovalRequiredErrorResponseShape(t *testing.T) {
 	// Verify the error response shape matches the spec: code -32001, message "approval denied"
 	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: false}}
-	notifier := newMockSlackNotifier(nil)
+	notifier := newMockApprovalNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 1}},
 		NewBudgetTracker(),
@@ -460,20 +460,20 @@ func (m *mockApprovalBridge) WaitForDecision(_ context.Context, _, _, _ string) 
 	return m.decision, m.err
 }
 
-// mockSlackNotifier is a test double for SlackNotifier.
-type mockSlackNotifier struct {
+// mockApprovalNotifier is a test double for ApprovalNotifier.
+type mockApprovalNotifier struct {
 	err        error
 	sendCalled chan struct{}
 }
 
-func newMockSlackNotifier(err error) *mockSlackNotifier {
-	return &mockSlackNotifier{
+func newMockApprovalNotifier(err error) *mockApprovalNotifier {
+	return &mockApprovalNotifier{
 		err:        err,
 		sendCalled: make(chan struct{}, 1),
 	}
 }
 
-func (m *mockSlackNotifier) SendApprovalRequest(_ context.Context, _ string, _ TicketRecord) error {
+func (m *mockApprovalNotifier) SendApprovalRequest(_ context.Context, _ string, _ TicketRecord) error {
 	m.sendCalled <- struct{}{}
 	return m.err
 }
@@ -497,7 +497,7 @@ func (b *policyGateLockedBuffer) String() string {
 
 func TestPolicyGateHandlerApprovalHoldApprovedReturnsContinue(t *testing.T) {
 	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: true, TicketID: "ticket-1"}}
-	notifier := newMockSlackNotifier(nil)
+	notifier := newMockApprovalNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
 		NewBudgetTracker(),
@@ -524,7 +524,7 @@ func TestPolicyGateHandlerApprovalHoldApprovedReturnsContinue(t *testing.T) {
 
 func TestPolicyGateHandlerApprovalHoldDeniedReturnsError(t *testing.T) {
 	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: false, TicketID: "ticket-1"}}
-	notifier := newMockSlackNotifier(nil)
+	notifier := newMockApprovalNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
 		NewBudgetTracker(),
@@ -554,7 +554,7 @@ func TestPolicyGateHandlerApprovalHoldDeniedReturnsError(t *testing.T) {
 
 func TestPolicyGateHandlerApprovalHoldBridgeErrorReturnsDenied(t *testing.T) {
 	bridge := &mockApprovalBridge{err: errors.New("bridge internal error")}
-	notifier := newMockSlackNotifier(nil)
+	notifier := newMockApprovalNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
 		NewBudgetTracker(),
@@ -585,7 +585,7 @@ func TestPolicyGateHandlerApprovalHoldBridgeErrorReturnsDenied(t *testing.T) {
 func TestPolicyGateHandlerApprovalHoldTimeoutReturnsTimeoutError(t *testing.T) {
 	audit := &policyGateAuditStub{}
 	bridge := &mockApprovalBridge{err: ErrApprovalTimeout}
-	notifier := newMockSlackNotifier(nil)
+	notifier := newMockApprovalNotifier(nil)
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
 		NewBudgetTracker(),
@@ -651,7 +651,7 @@ func TestPolicyGateHandlerRedactMasksFieldAndAuditsAllow(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"send_slack_message","arguments":{"message":"secret content","channel":"#general"}}`),
+		Params:  json.RawMessage(`{"name":"send_lark_message","arguments":{"message":"secret content","channel":"#general"}}`),
 	}
 
 	resp, err := handler.Handle(contextWithSessionAndTurn("session-redact", "turn-redact"), req)
@@ -725,7 +725,7 @@ func TestPolicyGateHandlerRedactSkipsMissingField(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"send_slack_message","arguments":{"channel":"#general"}}`),
+		Params:  json.RawMessage(`{"name":"send_lark_message","arguments":{"channel":"#general"}}`),
 	}
 
 	resp, err := handler.Handle(contextWithSessionAndTurn("session-redact-skip", "turn-redact-skip"), req)
@@ -748,7 +748,7 @@ func TestPolicyGateHandlerApprovalHoldNotifierErrorDoesNotBlockBridge(t *testing
 	// Even if notifier returns an error, WaitForDecision must still be called.
 	var buf policyGateLockedBuffer
 	bridge := &mockApprovalBridge{decision: ApprovalDecision{Approved: true, TicketID: "ticket-notifier-err"}}
-	notifier := newMockSlackNotifier(errors.New("slack down"))
+	notifier := newMockApprovalNotifier(errors.New("lark down"))
 	handler := newPolicyGateHandler(
 		&corepolicy.AgentPolicy{Budgets: corepolicy.Budgets{MaxToolCallsPerTurn: 3}},
 		NewBudgetTracker(),
@@ -778,9 +778,9 @@ func TestPolicyGateHandlerApprovalHoldNotifierErrorDoesNotBlockBridge(t *testing
 		t.Fatal("notifier.SendApprovalRequest was not called within 1 second")
 	}
 	deadline := time.Now().Add(time.Second)
-	for !strings.Contains(buf.String(), "slack notification failed") {
+	for !strings.Contains(buf.String(), "lark notification failed") {
 		if time.Now().After(deadline) {
-			t.Fatalf("logs = %q, want slack notification failure entry", buf.String())
+			t.Fatalf("logs = %q, want lark notification failure entry", buf.String())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

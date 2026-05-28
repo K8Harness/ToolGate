@@ -29,9 +29,9 @@ cases:
     mustInclude: [delete_record]
     policyOutcome: deny
 
-  - name: slack-pii-redact
-    input: slack-pii-message
-    mustInclude: [send_slack_message]
+  - name: lark-pii-redact
+    input: lark-pii-message
+    mustInclude: [send_lark_message]
     policyOutcome: allow
     mustNotContainInArgs: ["123-45-6789"]
 `)
@@ -48,8 +48,8 @@ cases:
 	}
 
 	last := suite.Cases[3]
-	if last.Name != "slack-pii-redact" {
-		t.Fatalf("suite.Cases[3].Name = %q, want slack-pii-redact", last.Name)
+	if last.Name != "lark-pii-redact" {
+		t.Fatalf("suite.Cases[3].Name = %q, want lark-pii-redact", last.Name)
 	}
 	if got := len(last.MustNotContainInArgs); got != 1 || last.MustNotContainInArgs[0] != "123-45-6789" {
 		t.Fatalf("suite.Cases[3].MustNotContainInArgs = %v, want [123-45-6789]", last.MustNotContainInArgs)

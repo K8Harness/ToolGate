@@ -369,6 +369,45 @@ func TestServerHTTPServerUsesApprovalSafeWriteTimeout(t *testing.T) {
 	}
 }
 
+func TestServerUpstreamErrorWritesAuditRecordWhenAuditIsSet(t *testing.T) {
+	var written []AuditRecord
+	fakeAudit := auditRecorderFunc(func(r AuditRecord) { written = append(written, r) })
+
+	failForwarder := &captureHandler{err: fmt.Errorf("upstream down")}
+	config := &Config{
+		ListenPort:      8080,
+		UpstreamMCPURL:  "http://example.invalid",
+		TurnIDHeader:    defaultTurnIDHeader,
+		UpstreamTimeout: time.Second,
+		SessionTTL:      time.Minute,
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	pipeline := mcp.NewPipeline(failForwarder)
+	server := NewServer(config, pipeline, logger)
+	server.forwarder = failForwarder
+	server.audit = fakeAudit
+
+	sessionID := server.sessions.Create().ID
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_charges","arguments":{}}}`))
+	req.Header.Set(mcpSessionIDHeader, sessionID)
+	server.ServeHTTP(rec, req)
+
+	if len(written) != 1 {
+		t.Fatalf("audit records written = %d, want 1", len(written))
+	}
+	if written[0].Decision != "upstream_error" {
+		t.Fatalf("audit decision = %q, want upstream_error", written[0].Decision)
+	}
+	if written[0].ToolName != "list_charges" {
+		t.Fatalf("audit tool name = %q, want list_charges", written[0].ToolName)
+	}
+}
+
+type auditRecorderFunc func(AuditRecord)
+
+func (f auditRecorderFunc) Write(r AuditRecord) { f(r) }
+
 type captureHandler struct {
 	callCount int
 	ctx       context.Context

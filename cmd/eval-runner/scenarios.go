@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,7 +28,7 @@ const mcpCrashSuiteYAML = `cases:
 `
 
 const approvalTimeoutSuiteYAML = `cases:
-  - name: approval-timeout-slack-down
+  - name: approval-timeout-lark-down
     input: >
       List recent charges for alice@example.com, then issue a full refund on
       the first non-refunded charge with reason requested_by_customer.
@@ -43,7 +44,12 @@ type scenarioDeps struct {
 	newRunner            runnerFactory
 	newRetryStorm        func(gatewayURL string) scenarioCaseExecutor
 	defaultAgentURL      string
+	defaultAIAgentURL    string
 	defaultGatewayMCPURL string
+	mcpAddr              string // TCP addr of upstream MCP (e.g. "localstripe-mcp:8421"); used for mcp-crash precondition
+	isMCPReachable       func(addr string) bool // injectable for tests; defaults to probeTCP
+	larkURL              string                 // healthz URL of Lark/mock-lark; used for approval-timeout precondition
+	isLarkReachable      func(url string) bool  // injectable for tests; defaults to probeHTTP
 }
 
 type scenarioCaseExecutor interface {
@@ -86,7 +92,7 @@ func makeScenarioStreamHandler(deps scenarioDeps) http.HandlerFunc {
 
 		switch body.ScenarioID {
 		case "mcp-crash", "approval-timeout":
-			agentURL, err := resolveAbsoluteURL(body.AgentURL, deps.defaultAgentURL)
+			agentURL, err := resolveAbsoluteURL(serverPreferredURL(body.AgentURL), deps.defaultAIAgentURL)
 			if err != nil {
 				http.Error(w, "missing or invalid agent_url", http.StatusBadRequest)
 				return
@@ -106,9 +112,57 @@ func makeScenarioStreamHandler(deps scenarioDeps) http.HandlerFunc {
 			}
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
+			if body.ScenarioID == "mcp-crash" {
+				checkReachable := deps.isMCPReachable
+				if checkReachable == nil {
+					checkReachable = defaultMCPReachable
+				}
+				addr := deps.mcpAddr
+				if addr == "" {
+					addr = "127.0.0.1:18421"
+				}
+				if checkReachable(addr) {
+					preconditionFail := CaseResult{
+						Name: suite.Cases[0].Name,
+						Failures: []CheckFailure{{
+							Check:    "precondition",
+							Expected: "MCP server unreachable",
+							Observed: "MCP server is still up — stop localstripe-mcp before running this scenario",
+						}},
+					}
+					_ = writeSSE(w, "case_start", caseStartEvent{Name: preconditionFail.Name, Index: 0, Total: 1})
+					_ = writeSSE(w, "case_result", caseResultEvent{Index: 0, Total: 1, Result: preconditionFail})
+					_ = writeSSE(w, "summary", summarizeResults([]CaseResult{preconditionFail}))
+					return
+				}
+			}
+			if body.ScenarioID == "approval-timeout" {
+				checkLark := deps.isLarkReachable
+				if checkLark == nil {
+					checkLark = defaultLarkReachable
+				}
+				larkURL := deps.larkURL
+				if larkURL == "" {
+					larkURL = "http://localhost:18090/healthz"
+				}
+				if checkLark(larkURL) {
+					preconditionFail := CaseResult{
+						Name: suite.Cases[0].Name,
+						Failures: []CheckFailure{{
+							Check:    "precondition",
+							Expected: "Lark server unreachable",
+							Observed: "Lark server is still up — stop mock-lark before running this scenario",
+						}},
+					}
+					_ = writeSSE(w, "case_start", caseStartEvent{Name: preconditionFail.Name, Index: 0, Total: 1})
+					_ = writeSSE(w, "case_result", caseResultEvent{Index: 0, Total: 1, Result: preconditionFail})
+					_ = writeSSE(w, "summary", summarizeResults([]CaseResult{preconditionFail}))
+					return
+				}
+			}
 			streamEvalSuite(r.Context(), w, deps.newRunner(agentURL), suite.Cases)
 		case "retry-storm":
-			gatewayURL, err := resolveGatewayMCPURL(body.GatewayMCPURL, deps.defaultGatewayMCPURL)
+			gatewayURL, err := resolveGatewayMCPURL(serverPreferredURL(body.GatewayMCPURL), deps.defaultGatewayMCPURL)
 			if err != nil {
 				http.Error(w, "missing or invalid gateway_mcp_url", http.StatusBadRequest)
 				return
@@ -184,6 +238,37 @@ func warmGatewayCapCache(gatewayMCPURL string) {
 	}
 	_ = resp2.Body.Close()
 	slog.Info("gateway warmup: capability cache primed", "gateway", gatewayMCPURL)
+}
+
+func defaultMCPReachable(addr string) bool {
+	conn, err := net.DialTimeout("tcp", addr, 750*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+func defaultLarkReachable(healthzURL string) bool {
+	client := &http.Client{Timeout: 750 * time.Millisecond}
+	resp, err := client.Get(healthzURL)
+	if err != nil {
+		return false
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
+}
+
+// serverPreferredURL returns "" (causing fallback to the server-side default)
+// when the browser-provided value is a localhost/loopback URL. Inside Docker,
+// localhost resolves to the container itself, not the host, so browser-provided
+// localhost addresses must be replaced by the server's configured service URLs.
+func serverPreferredURL(requestValue string) string {
+	u := strings.TrimSpace(requestValue)
+	if strings.Contains(u, "localhost") || strings.Contains(u, "127.0.0.1") {
+		return ""
+	}
+	return u
 }
 
 func resolveAbsoluteURL(requestValue, fallback string) (string, error) {

@@ -53,9 +53,10 @@ func TestRunGatewayFatalfsWhenPolicyLoadFails(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://localhost:5432/toolgate?sslmode=disable")
 	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
-	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
-	t.Setenv("SLACK_SIGNING_SECRET", "test-signing-secret")
-	t.Setenv("SLACK_CHANNEL", "#approvals")
+	t.Setenv("LARK_APP_ID", "cli_test_app")
+	t.Setenv("LARK_APP_SECRET", "test_app_secret")
+	t.Setenv("LARK_CHAT_ID", "oc_test_chat")
+	t.Setenv("LARK_VERIFICATION_TOKEN", "test_verification_token")
 	t.Setenv("POLICY_FILE", filepath.Join(t.TempDir(), "missing-policy.yaml"))
 
 	message := interceptFatalf(t, func() {
@@ -74,9 +75,10 @@ func TestRunGatewayFatalfsWhenPolicyYAMLIsInvalid(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://localhost:5432/toolgate?sslmode=disable")
 	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
-	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
-	t.Setenv("SLACK_SIGNING_SECRET", "test-signing-secret")
-	t.Setenv("SLACK_CHANNEL", "#approvals")
+	t.Setenv("LARK_APP_ID", "cli_test_app")
+	t.Setenv("LARK_APP_SECRET", "test_app_secret")
+	t.Setenv("LARK_CHAT_ID", "oc_test_chat")
+	t.Setenv("LARK_VERIFICATION_TOKEN", "test_verification_token")
 	t.Setenv("POLICY_FILE", writePolicyFile(t, "rules: ["))
 
 	message := interceptFatalf(t, func() {
@@ -95,9 +97,10 @@ func TestRunGatewayFatalfsWhenPostgresInitFails(t *testing.T) {
 	t.Setenv("UPSTREAM_MCP_URL", "http://example.invalid")
 	t.Setenv("POSTGRES_DSN", "postgres://127.0.0.1:1/toolgate?sslmode=disable&connect_timeout=1")
 	t.Setenv("REDIS_DSN", testRedisDSN(t))
-	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
-	t.Setenv("SLACK_SIGNING_SECRET", "test-signing-secret")
-	t.Setenv("SLACK_CHANNEL", "#approvals")
+	t.Setenv("LARK_APP_ID", "cli_test_app")
+	t.Setenv("LARK_APP_SECRET", "test_app_secret")
+	t.Setenv("LARK_CHAT_ID", "oc_test_chat")
+	t.Setenv("LARK_VERIFICATION_TOKEN", "test_verification_token")
 	t.Setenv("POLICY_FILE", writePolicyFile(t, `
 defaultAction: deny
 budgets:
@@ -215,9 +218,10 @@ rules:
 		SessionTTL:         time.Minute,
 		SessionLockTTL:     defaultSessionLockTTL,
 		LockAcquireTimeout: defaultLockAcquireTimeout,
-		SlackBotToken:      "test-token",
-		SlackSigningSecret: "test-secret",
-		SlackChannel:       "#test",
+		LarkAppID:             "cli_test",
+		LarkAppSecret:         "test-secret",
+		LarkChatID:            "oc_test",
+		LarkVerificationToken: "test-token",
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -258,7 +262,7 @@ rules:
 	}
 }
 
-func TestBuildGatewayServerRegistersSlackWebhookRoute(t *testing.T) {
+func TestBuildGatewayServerRegistersLarkWebhookRoute(t *testing.T) {
 	ctx := context.Background()
 	dsn := testSchemaDSN(t, testPostgresDSN(t))
 
@@ -279,9 +283,10 @@ budgets:
 		SessionTTL:         time.Minute,
 		SessionLockTTL:     time.Minute,
 		LockAcquireTimeout: 250 * time.Millisecond,
-		SlackBotToken:      "xoxb-test-token",
-		SlackSigningSecret: "test-signing-secret",
-		SlackChannel:       "#approvals",
+		LarkAppID:             "cli_test_app",
+		LarkAppSecret:         "test_app_secret",
+		LarkChatID:            "oc_test_chat",
+		LarkVerificationToken: "test-verification-token",
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -294,21 +299,22 @@ budgets:
 	ts := httptest.NewServer(server)
 	defer ts.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/slack/actions", strings.NewReader("payload=%7B%7D"))
+	// A request with missing Lark signature headers should return 400.
+	req := httptest.NewRequest(http.MethodPost, "/lark/actions", strings.NewReader(`{}`))
 	rec := httptest.NewRecorder()
 	server.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("POST /slack/actions status = %d, want %d", rec.Code, http.StatusBadRequest)
+		t.Fatalf("POST /lark/actions status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 
-	resp, err := http.Post(ts.URL+"/slack/actions", "application/x-www-form-urlencoded", strings.NewReader("payload=%7B%7D"))
+	resp, err := http.Post(ts.URL+"/lark/actions", "application/json", strings.NewReader(`{}`))
 	if err != nil {
-		t.Fatalf("POST /slack/actions via httptest server: %v", err)
+		t.Fatalf("POST /lark/actions via httptest server: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("network POST /slack/actions status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		t.Fatalf("network POST /lark/actions status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 }
 

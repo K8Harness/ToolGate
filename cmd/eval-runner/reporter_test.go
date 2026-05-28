@@ -42,12 +42,12 @@ func TestReporterFailureProducesFailureVerdictAndDetails(t *testing.T) {
 				},
 				{
 					Check:    "mustNotInclude",
-					Expected: "send_slack_message",
-					Observed: "send_slack_message",
+					Expected: "send_lark_message",
+					Observed: "send_lark_message",
 				},
 			},
 		},
-		{Name: "slack-pii-redact", Passed: true},
+		{Name: "lark-pii-redact", Passed: true},
 	}
 
 	report := GenerateReport(results)
@@ -61,20 +61,20 @@ func TestReporterFailureProducesFailureVerdictAndDetails(t *testing.T) {
 	assertSummaryRows(t, report, []string{
 		"| small-refund-allow | PASS |",
 		"| delete-customer-deny | FAIL |",
-		"| slack-pii-redact | PASS |",
+		"| lark-pii-redact | PASS |",
 	})
 	assertReportOrder(t, report, []string{
 		"| Case | Status |",
 		"| --- | --- |",
 		"| small-refund-allow | PASS |",
 		"| delete-customer-deny | FAIL |",
-		"| slack-pii-redact | PASS |",
+		"| lark-pii-redact | PASS |",
 		"2/3 cases passed",
 		"## delete-customer-deny",
 		"| Check | Expected | Observed |",
 		"| --- | --- | --- |",
 		"| policyOutcome | deny | allow |",
-		"| mustNotInclude | send_slack_message | send_slack_message |",
+		"| mustNotInclude | send_lark_message | send_lark_message |",
 		"FAIL: 1 case(s) failed",
 	})
 }
@@ -99,7 +99,7 @@ func TestReporterFailureDetailsRemainInInputOrderAndVerdictIsLastLine(t *testing
 			Failures: []CheckFailure{
 				{
 					Check:    "mustInclude",
-					Expected: "create_ticket -> send_slack_message",
+					Expected: "create_ticket -> send_lark_message",
 					Observed: "create_ticket",
 				},
 			},
@@ -118,7 +118,7 @@ func TestReporterFailureDetailsRemainInInputOrderAndVerdictIsLastLine(t *testing
 		"## case-zeta",
 		"| policyOutcome | allow | deny |",
 		"## case-beta",
-		"| mustInclude | create_ticket -> send_slack_message | create_ticket |",
+		"| mustInclude | create_ticket -> send_lark_message | create_ticket |",
 		"FAIL: 2 case(s) failed",
 	})
 

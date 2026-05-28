@@ -73,7 +73,7 @@ func deleteRecordHandler(_ context.Context, _ *mcp.CallToolRequest, args DeleteR
 }
 
 func sendSlackMessageHandler(_ context.Context, _ *mcp.CallToolRequest, args SendSlackMessageParams) (*mcp.CallToolResult, any, error) {
-	payload := fmt.Sprintf(`{"ok":true,"tool":"send_slack_message","channel":%q,"message":%q}`, args.Channel, args.Message)
+	payload := fmt.Sprintf(`{"ok":true,"tool":"send_lark_message","channel":%q,"message":%q}`, args.Channel, args.Message)
 	return cannedJSONResult(payload), nil, nil
 }
 
@@ -125,8 +125,8 @@ func main() {
 	)
 	mcp.AddTool(server,
 		&mcp.Tool{
-			Name:        "send_slack_message",
-			Description: "Send a Slack message (demo contract)",
+			Name:        "send_lark_message",
+			Description: "Send a Lark message (demo contract)",
 		},
 		sendSlackMessageHandler,
 	)

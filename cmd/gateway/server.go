@@ -30,7 +30,7 @@ type Server struct {
 	pipeline     *mcp.Pipeline
 	forwarder    mcp.Handler
 	guard        *ConcurrencyGuard
-	slackWebhook http.Handler
+	webhookHandler http.Handler
 	sessions     *SessionRegistry
 	mux          *http.ServeMux
 	log          *slog.Logger
@@ -56,10 +56,10 @@ func NewServer(config *Config, pipeline *mcp.Pipeline, log *slog.Logger) *Server
 	return server
 }
 
-func (s *Server) SetSlackWebhookHandler(handler http.Handler) {
-	s.slackWebhook = handler
+func (s *Server) SetWebhookHandler(handler http.Handler) {
+	s.webhookHandler = handler
 	if handler != nil {
-		s.mux.Handle("POST /slack/actions", handler)
+		s.mux.Handle("POST /lark/actions", handler)
 	}
 }
 

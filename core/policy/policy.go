@@ -10,9 +10,10 @@ const (
 )
 
 type PolicyRule struct {
-	Tool         string   `yaml:"tool"`
-	Action       Action   `yaml:"action"`
-	RedactFields []string `yaml:"redactFields,omitempty"`
+	Tool         string         `yaml:"tool"`
+	Action       Action         `yaml:"action"`
+	RedactFields []string       `yaml:"redactFields,omitempty"`
+	When         map[string]any `yaml:"when,omitempty"`
 }
 
 type Budgets struct {

@@ -127,12 +127,12 @@
       },
       'approval-timeout': {
         label: 'Approval Timeout',
-        description: 'Slack is down; approvalRequired expires after demo TTL.',
+        description: 'Lark is down; approvalRequired expires after demo TTL.',
         mode: 'scenario',
         agentUrl: 'http://127.0.0.1:18086',
-        caseNames: ['approval-timeout-slack-down'],
+        caseNames: ['approval-timeout-lark-down'],
         plan: `cases:
-  - name: approval-timeout-slack-down
+  - name: approval-timeout-lark-down
     input: >
       List recent charges for alice@example.com, then issue a full refund on
       the first non-refunded charge with reason requested_by_customer.
@@ -151,7 +151,7 @@
       - list_recent_charges
     policyOutcome: upstream_error
 
-  - name: approval-timeout-slack-down
+  - name: approval-timeout-lark-down
     input: >
       List recent charges for alice@example.com, then issue a full refund on
       the first non-refunded charge with reason requested_by_customer.

@@ -5,7 +5,7 @@ cases:
       - list_recent_charges
     policyOutcome: upstream_error
 
-  - name: approval-timeout-slack-down
+  - name: approval-timeout-lark-down
     input: >
       List my recent charges, then issue a full refund on the first
       non-refunded charge with reason requested_by_customer.

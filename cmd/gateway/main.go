@@ -85,10 +85,10 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 	auditWriter.Start(ctx)
 	ticketStore := NewTicketStore(pool)
 	sessionLocker := NewSessionLocker(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)
-	slackNotifier := NewSlackClient(config.SlackBotToken, config.SlackChannel, config.SlackAPIBaseURL, logger)
-	approvalBridge := NewRedisApprovalBridge(redisClient, ticketStore, sessionLocker, config.SessionLockTTL, config.ApprovalLockTTL, logger)
-	slackWebhook := NewSlackWebhookHandler(config.SlackSigningSecret, ticketStore, redisClient, logger)
-	policyGate := NewPolicyGateHandler(policy, budgetTracker, auditWriter, ticketStore, approvalBridge, slackNotifier, logger)
+	larkNotifier := NewLarkClient(config.LarkAppID, config.LarkAppSecret, config.LarkChatID, config.LarkAPIBaseURL, logger)
+	approvalBridge := NewRedisApprovalBridge(redisClient, ticketStore, sessionLocker, config.SessionLockTTL, config.ApprovalTimeout, logger)
+	larkWebhook := NewLarkWebhookHandler(config.LarkVerificationToken, ticketStore, redisClient, logger)
+	policyGate := NewPolicyGateHandler(policy, budgetTracker, auditWriter, ticketStore, approvalBridge, larkNotifier, logger)
 	turnRWLock := NewTurnRWLock(redisClient, config.SessionLockTTL, config.LockAcquireTimeout)
 	classifier := NewOperationClassifier(policy.OperationClasses)
 	guard := NewConcurrencyGuard(sessionLocker, turnRWLock, classifier)
@@ -100,10 +100,10 @@ func buildGatewayServer(ctx context.Context, config *Config, logger *slog.Logger
 	pipeline.Use(policyGate)
 
 	server := NewServer(config, pipeline, logger)
-	server.audit = auditWriter
 	server.forwarder = forwarder
+	server.audit = auditWriter
 	server.guard = guard
-	server.SetSlackWebhookHandler(slackWebhook)
+	server.SetWebhookHandler(larkWebhook)
 	return server, cleanup, nil
 }
 

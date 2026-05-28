@@ -269,7 +269,7 @@ func TestEvaluateScenarios(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Evaluate(policy, tt.toolName)
+			got := Evaluate(policy, tt.toolName, nil)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("Evaluate(%q) = %#v, want %#v", tt.toolName, got, tt.want)
 			}
@@ -277,10 +277,53 @@ func TestEvaluateScenarios(t *testing.T) {
 	}
 
 	t.Run("empty rules list returns default action", func(t *testing.T) {
-		got := Evaluate(&AgentPolicy{DefaultAction: ActionAllow}, "tool_not_listed")
+		got := Evaluate(&AgentPolicy{DefaultAction: ActionAllow}, "tool_not_listed", nil)
 		want := PolicyDecision{Action: ActionAllow}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Evaluate(empty rules) = %#v, want %#v", got, want)
+		}
+	})
+}
+
+func TestEvaluateWhenCondition(t *testing.T) {
+	policy := &AgentPolicy{
+		Rules: []PolicyRule{
+			{Tool: "create_refund", Action: ActionAllow, When: map[string]any{"dry_run": true}},
+			{Tool: "create_refund", Action: ActionApprovalRequired},
+		},
+		Budgets:       Budgets{MaxToolCallsPerTurn: 5},
+		DefaultAction: ActionDeny,
+	}
+
+	t.Run("dry_run true matches allow rule", func(t *testing.T) {
+		got := Evaluate(policy, "create_refund", []byte(`{"dry_run":true}`))
+		want := PolicyDecision{Action: ActionAllow}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Evaluate(dry_run=true) = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("dry_run false falls through to approvalRequired", func(t *testing.T) {
+		got := Evaluate(policy, "create_refund", []byte(`{"dry_run":false}`))
+		want := PolicyDecision{Action: ActionApprovalRequired}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Evaluate(dry_run=false) = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("no dry_run arg falls through to approvalRequired", func(t *testing.T) {
+		got := Evaluate(policy, "create_refund", []byte(`{"amount":100}`))
+		want := PolicyDecision{Action: ActionApprovalRequired}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Evaluate(no dry_run) = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("nil args falls through to approvalRequired", func(t *testing.T) {
+		got := Evaluate(policy, "create_refund", nil)
+		want := PolicyDecision{Action: ActionApprovalRequired}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Evaluate(nil args) = %#v, want %#v", got, want)
 		}
 	})
 }

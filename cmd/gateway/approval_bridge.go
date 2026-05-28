@@ -12,6 +12,8 @@ import (
 // ErrApprovalTimeout is returned when no decision arrives within the timeout window.
 var ErrApprovalTimeout = errors.New("approval timeout")
 
+const defaultApprovalTimeout = 5 * time.Minute
+
 // ApprovalDecision is the outcome of a completed approval wait.
 type ApprovalDecision struct {
 	Approved bool
@@ -113,6 +115,9 @@ func NewRedisApprovalBridge(
 ) *RedisApprovalBridge {
 	if log == nil {
 		log = slog.Default()
+	}
+	if approvalTimeout <= 0 {
+		approvalTimeout = defaultApprovalTimeout
 	}
 	b := &RedisApprovalBridge{
 		redis:              rdb,

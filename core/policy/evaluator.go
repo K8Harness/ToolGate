@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -29,14 +30,27 @@ func LoadPolicy(path string) (*AgentPolicy, error) {
 	return &policy, nil
 }
 
-func Evaluate(policy *AgentPolicy, toolName string) PolicyDecision {
+func Evaluate(policy *AgentPolicy, toolName string, args json.RawMessage) PolicyDecision {
+	var argsMap map[string]any
+	if len(args) > 0 {
+		_ = json.Unmarshal(args, &argsMap)
+	}
 	for _, rule := range policy.Rules {
-		if rule.Tool == toolName {
+		if rule.Tool == toolName && matchWhen(rule.When, argsMap) {
 			return PolicyDecision{Action: rule.Action, RedactFields: rule.RedactFields}
 		}
 	}
-
 	return PolicyDecision{Action: policy.DefaultAction}
+}
+
+func matchWhen(when map[string]any, args map[string]any) bool {
+	for k, wantVal := range when {
+		gotVal, ok := args[k]
+		if !ok || gotVal != wantVal {
+			return false
+		}
+	}
+	return true
 }
 
 func validatePolicy(policy *AgentPolicy) error {

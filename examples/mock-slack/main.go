@@ -29,6 +29,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/chat.postMessage", handleChatPostMessage)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	log.Println("mock-slack listening on :8090")
 	log.Fatal(http.ListenAndServe(":8090", mux))
 }

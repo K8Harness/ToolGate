@@ -26,13 +26,13 @@ type ticketInserter interface {
 }
 
 type policyEvaluator interface {
-	Evaluate(policy *corepolicy.AgentPolicy, toolName string) corepolicy.PolicyDecision
+	Evaluate(policy *corepolicy.AgentPolicy, toolName string, args json.RawMessage) corepolicy.PolicyDecision
 }
 
 type defaultPolicyEvaluator struct{}
 
-func (defaultPolicyEvaluator) Evaluate(policy *corepolicy.AgentPolicy, toolName string) corepolicy.PolicyDecision {
-	return corepolicy.Evaluate(policy, toolName)
+func (defaultPolicyEvaluator) Evaluate(policy *corepolicy.AgentPolicy, toolName string, args json.RawMessage) corepolicy.PolicyDecision {
+	return corepolicy.Evaluate(policy, toolName, args)
 }
 
 type BudgetTracker struct {
@@ -62,7 +62,7 @@ type PolicyGateHandler struct {
 	tickets   ticketInserter
 	evaluator policyEvaluator
 	bridge    ApprovalBridge
-	notifier  SlackNotifier
+	notifier  ApprovalNotifier
 	log       *slog.Logger
 	now       func() time.Time
 }
@@ -73,7 +73,7 @@ func NewPolicyGateHandler(
 	audit *AuditWriter,
 	tickets *TicketStore,
 	bridge ApprovalBridge,
-	notifier SlackNotifier,
+	notifier ApprovalNotifier,
 	log *slog.Logger,
 ) *PolicyGateHandler {
 	return newPolicyGateHandler(policy, budget, audit, tickets, defaultPolicyEvaluator{}, bridge, notifier, log, time.Now)
@@ -86,7 +86,7 @@ func newPolicyGateHandler(
 	tickets ticketInserter,
 	evaluator policyEvaluator,
 	bridge ApprovalBridge,
-	notifier SlackNotifier,
+	notifier ApprovalNotifier,
 	log *slog.Logger,
 	now func() time.Time,
 ) *PolicyGateHandler {
@@ -160,7 +160,7 @@ func (h *PolicyGateHandler) Handle(ctx context.Context, req *mcp.JSONRPCRequest)
 		return mcp.NewErrorResponse(req.ID, mcp.CodePolicyDenied, "tool-call budget exceeded"), nil
 	}
 
-	decision := h.evaluator.Evaluate(h.policy, toolName)
+	decision := h.evaluator.Evaluate(h.policy, toolName, arguments)
 	if decision.Action != corepolicy.ActionRedact {
 		h.audit.Write(AuditRecord{
 			SessionID: sessionID,
@@ -205,7 +205,7 @@ func (h *PolicyGateHandler) Handle(ctx context.Context, req *mcp.JSONRPCRequest)
 				ToolName:  toolName,
 				Arguments: arguments,
 			}); err != nil {
-				h.log.Error("slack notification failed", "ticketID", ticketID, "error", err)
+				h.log.Error("lark notification failed", "ticketID", ticketID, "error", err)
 			}
 		}()
 

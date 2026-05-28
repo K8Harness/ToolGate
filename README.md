@@ -35,7 +35,7 @@ Services started:
 | `localstripe` | 18420 | Fake Stripe API |
 | `localstripe-mcp` | 18421 | MCP server wrapping localstripe |
 | `eval-trigger` | 18086 | Python agent that the eval runner drives |
-| `mock-slack` | 18090 | Fake Slack (receives approval requests) |
+| `mock-lark` | 18090 | Fake Lark (auto-approves for local dev) |
 | `postgres` | 15432 | Audit log store |
 
 ### 3. Start the eval runner UI
@@ -58,7 +58,7 @@ Each scenario requires a specific stack state. The **Stack Health** panel in the
 
 **What it tests:** Gateway surfaces a clean `upstream_error` when the upstream MCP server is unavailable.
 
-**Required state:** Gateway up, MCP down, Slack any, Postgres up.
+**Required state:** Gateway up, MCP down, Lark any, Postgres up.
 
 ```bash
 # Warm the gateway capability cache while MCP is healthy
@@ -91,9 +91,9 @@ No additional setup needed. Click **Retry Storm → Run Scenario**.
 
 ### Scenario 3 — Approval Timeout
 
-**What it tests:** An `approvalRequired` decision expires gracefully when Slack is unreachable.
+**What it tests:** An `approvalRequired` decision expires gracefully when Lark is unreachable.
 
-**Required state:** Gateway up, MCP up, Slack down, Postgres up.
+**Required state:** Gateway up, MCP up, Lark down, Postgres up.
 
 ```bash
 # Restore MCP
@@ -130,8 +130,8 @@ curl -s -X POST http://localhost:18080/mcp \
   -H "Mcp-Session-Id: $SESSION" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' > /dev/null
 
-# Stop Slack
-docker compose stop mock-slack
+# Stop Lark
+docker compose stop mock-lark
 ```
 
 Click **Approval Timeout → Run Scenario**. The case waits ~15 s for the approval TTL to expire.
@@ -149,6 +149,66 @@ make demo-resilience
 ```
 
 This script manages the full Docker lifecycle, runs each scenario in sequence, and tears down the stack on exit.
+
+---
+
+## Real Lark approval setup
+
+By default the stack uses `mock-lark` (port 18090), which auto-approves every request after 50 ms. To wire up a real Lark workspace so a human receives an interactive card and clicks Approve/Deny:
+
+### Prerequisites
+
+- A Lark developer account and an app created at [open.larksuite.com](https://open.larksuite.com)
+- [ngrok](https://ngrok.com/) (or any tunnel) to expose your local gateway to Lark's servers
+
+### Step 1 — Create a Lark app
+
+1. Go to **Lark Open Platform → Create App → Custom App**.
+2. Under **Credentials & Basic Info**, note your **App ID** and **App Secret**.
+3. Under **Features → Bot**, enable the Bot feature.
+4. Under **Messaging API → Events**, subscribe to `im.message.receive_v1` so the bot can join groups.
+5. Under **Permissions**, grant: `im:message`, `im:message:send_as_bot`.
+
+### Step 2 — Get a Chat ID
+
+Add the bot to a group chat (or use your personal chat), then note the **Chat ID** (`oc_…`) from the group info or API.
+
+### Step 3 — Configure the Card Request URL
+
+1. Start an ngrok tunnel pointing at the gateway's action endpoint:
+   ```bash
+   ngrok http 18080
+   ```
+2. Copy the HTTPS forwarding URL (e.g. `https://abc123.ngrok-free.app`).
+3. In your Lark app settings, go to **Features → Bot → Card Request URL** and set it to:
+   ```
+   https://abc123.ngrok-free.app/lark/actions
+   ```
+4. Save and publish the app version.
+
+### Step 4 — Set environment variables
+
+Create a `.env` file in the project root (it is gitignored):
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-…
+
+LARK_APP_ID=cli_xxxxxxxxxxxx
+LARK_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+LARK_CHAT_ID=oc_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+LARK_VERIFICATION_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Unset `LARK_API_BASE_URL` (or leave it absent) so the gateway sends cards to the real Lark API instead of mock-lark.
+
+### Step 5 — Start the stack
+
+```bash
+source .env
+docker compose up -d --wait
+```
+
+The gateway reads the four `LARK_*` variables from the environment. When `create_refund` is triggered, a Lark card will arrive in the configured chat. Click **Approve** or **Deny** to resolve the approval hold.
 
 ---
 
