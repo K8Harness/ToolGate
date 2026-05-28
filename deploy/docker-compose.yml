@@ -132,6 +132,25 @@ services:
     networks:
       - eval-gate
 
+  localstripe-seed:
+    build:
+      context: ../localstripe_demo
+      dockerfile_inline: |
+        FROM python:3.12-alpine
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e ".[webapp]"
+        ENTRYPOINT ["localstripe-seed"]
+    depends_on:
+      localstripe:
+        condition: service_healthy
+    environment:
+      LOCALSTRIPE_URL: http://localstripe:8420
+      LOCALSTRIPE_API_KEY: sk_test_12345
+    restart: "no"
+    networks:
+      - eval-gate
+
   mock-slack:
     build:
       context: ..
@@ -240,6 +259,8 @@ services:
         condition: service_healthy
       eval-trigger:
         condition: service_healthy
+      localstripe-seed:
+        condition: service_completed_successfully
     environment:
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/gateway?sslmode=disable
       AGENT_URL: http://support-agent:8085
