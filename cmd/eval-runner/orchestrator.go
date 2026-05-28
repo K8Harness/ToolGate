@@ -63,6 +63,11 @@ func (o *Orchestrator) runCompose(ctx context.Context, args ...string) (string, 
 	return combined.String(), nil
 }
 
+type noopOrchestrator struct{}
+
+func (noopOrchestrator) Up(_ context.Context) error   { return nil }
+func (noopOrchestrator) Down(_ context.Context) error { return nil }
+
 func tailLines(text string, count int) string {
 	lines := strings.Split(strings.TrimSpace(text), "\n")
 	if len(lines) == 0 || lines[0] == "" {

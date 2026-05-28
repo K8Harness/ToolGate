@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -12,6 +13,7 @@ var allowedPolicyOutcomes = map[string]struct{}{
 	"deny":             {},
 	"approvalRequired": {},
 	"expired":          {},
+	"upstream_error":   {},
 }
 
 func LoadSuite(path string) (*EvalSuite, error) {
@@ -21,9 +23,17 @@ func LoadSuite(path string) (*EvalSuite, error) {
 	}
 	defer func() { _ = file.Close() }()
 
-	var suite EvalSuite
-	if err := yaml.NewDecoder(file).Decode(&suite); err != nil {
+	suite, err := LoadSuiteFromReader(file)
+	if err != nil {
 		return nil, fmt.Errorf("parse eval suite %q: %w", path, err)
+	}
+	return suite, nil
+}
+
+func LoadSuiteFromReader(r io.Reader) (*EvalSuite, error) {
+	var suite EvalSuite
+	if err := yaml.NewDecoder(r).Decode(&suite); err != nil {
+		return nil, fmt.Errorf("parse eval suite: %w", err)
 	}
 
 	for i, evalCase := range suite.Cases {

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -446,5 +447,40 @@ func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	}
 	if resp.Error.Code != want {
 		t.Fatalf("error.code = %d, want %d", resp.Error.Code, want)
+	}
+}
+
+type captureAuditWriter struct {
+	records []AuditRecord
+}
+
+func (c *captureAuditWriter) Write(r AuditRecord) {
+	c.records = append(c.records, r)
+}
+
+func TestServerToolsCallWritesUpstreamErrorAuditOnForwarderFailure(t *testing.T) {
+	audit := &captureAuditWriter{}
+	server := newTestServer(t, &captureHandler{})
+	server.audit = audit
+	server.pipeline = mcp.NewPipeline(mcp.HandlerFunc(func(ctx context.Context, req *mcp.JSONRPCRequest) (*mcp.JSONRPCResponse, error) {
+		return nil, fmt.Errorf("connection refused")
+	}))
+	session := server.sessions.Create()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp",
+		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_recent_charges","arguments":{}}}`))
+	req.Header.Set(mcpSessionIDHeader, session.ID)
+	rec := httptest.NewRecorder()
+
+	server.ServeHTTP(rec, req)
+
+	if len(audit.records) != 1 {
+		t.Fatalf("audit records = %d, want 1", len(audit.records))
+	}
+	if audit.records[0].Decision != "upstream_error" {
+		t.Fatalf("Decision = %q, want upstream_error", audit.records[0].Decision)
+	}
+	if audit.records[0].ToolName != "list_recent_charges" {
+		t.Fatalf("ToolName = %q, want list_recent_charges", audit.records[0].ToolName)
 	}
 }

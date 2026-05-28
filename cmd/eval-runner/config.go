@@ -12,6 +12,7 @@ type Config struct {
 	PostgresDSN string
 	ComposeFile string
 	AgentURL    string
+	SkipCompose bool
 }
 
 func LoadConfig() (*Config, error) {
@@ -29,6 +30,7 @@ func LoadConfig() (*Config, error) {
 		PostgresDSN: postgresDSN,
 		ComposeFile: envStringWithInfoNotice("EVAL_COMPOSE_FILE", defaultComposeFilePath, "using default compose file path"),
 		AgentURL:    agentURL,
+		SkipCompose: os.Getenv("EVAL_SKIP_COMPOSE") == "true",
 	}, nil
 }
 

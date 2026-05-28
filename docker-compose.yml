@@ -18,8 +18,10 @@ services:
       SLACK_BOT_TOKEN: "xoxb-demo-token"
       SLACK_SIGNING_SECRET: "demo-signing-secret"
       SLACK_CHANNEL: "C-DEMO-APPROVALS"
+      SLACK_API_BASE_URL: "http://mock-slack:8090/api"
       SESSION_LOCK_TTL: "3s"
       LOCK_ACQUIRE_TIMEOUT: "5s"
+      APPROVAL_LOCK_TTL: "15s"
       UPSTREAM_MCP_URL: http://fake-upstream:8081/mcp
     ports:
       - "18080:8080"
@@ -47,6 +49,8 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+    ports:
+      - "15432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
@@ -106,6 +110,47 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
+
+  eval-trigger:
+    build:
+      context: ./localstripe_demo
+      dockerfile_inline: |
+        FROM python:3.12-alpine
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e ".[agent]"
+        ENTRYPOINT ["localstripe-eval-trigger"]
+    depends_on:
+      localstripe-mcp:
+        condition: service_healthy
+    environment:
+      MCP_URL: http://localstripe-mcp:8421/mcp
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+    ports:
+      - "18086:8086"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8086"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+
+  mock-slack:
+    build:
+      context: .
+      dockerfile: examples/mock-slack/Dockerfile
+    environment:
+      GATEWAY_URL: http://gateway:8080
+      SLACK_SIGNING_SECRET: "demo-signing-secret"
+    ports:
+      - "18090:8090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8090/healthz 2>/dev/null || exit 0"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
 
   demo-webapp:
     build:

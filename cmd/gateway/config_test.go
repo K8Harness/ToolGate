@@ -346,6 +346,49 @@ func TestLoadConfigReadsSlackVars(t *testing.T) {
 	}
 }
 
+func TestLoadConfigReadsApprovalLockTTL(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("APPROVAL_LOCK_TTL", "15s")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.ApprovalLockTTL != 15*time.Second {
+		t.Fatalf("ApprovalLockTTL = %v, want 15s", cfg.ApprovalLockTTL)
+	}
+}
+
+func TestLoadConfigDefaultsApprovalLockTTLToFiveMinutes(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("APPROVAL_LOCK_TTL", "")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.ApprovalLockTTL != 5*time.Minute {
+		t.Fatalf("ApprovalLockTTL = %v, want 5m0s", cfg.ApprovalLockTTL)
+	}
+}
+
+func setRequiredEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("GATEWAY_PORT", "")
+	t.Setenv("POLICY_FILE", "")
+	t.Setenv("POSTGRES_DSN", "postgres://gateway:gateway@localhost:5432/gateway?sslmode=disable")
+	t.Setenv("REDIS_DSN", "redis://localhost:6379/0")
+	t.Setenv("UPSTREAM_MCP_URL", "http://upstream.example/mcp")
+	t.Setenv("TURN_ID_HEADER", "")
+	t.Setenv("UPSTREAM_TIMEOUT", "")
+	t.Setenv("SESSION_TTL", "")
+	t.Setenv("SESSION_LOCK_TTL", "")
+	t.Setenv("LOCK_ACQUIRE_TIMEOUT", "")
+	t.Setenv("SLACK_BOT_TOKEN", "xoxb-default-token")
+	t.Setenv("SLACK_SIGNING_SECRET", "default-signing-secret")
+	t.Setenv("SLACK_CHANNEL", "#approvals")
+}
+
 func setDefaultLoggerForTest(dst *bytes.Buffer) func() {
 	previous := slog.Default()
 	logger := slog.New(slog.NewTextHandler(dst, &slog.HandlerOptions{Level: slog.LevelInfo}))
