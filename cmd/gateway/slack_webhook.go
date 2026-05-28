@@ -2,14 +2,12 @@ package main
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
@@ -31,24 +29,23 @@ func (r *realRedisPublisher) Publish(ctx context.Context, channel string, messag
 	return r.client.Publish(ctx, channel, message).Err()
 }
 
-// SlackWebhookHandler handles POST /slack/actions requests from Slack.
-// It verifies the HMAC-SHA256 signature, parses the action payload,
+// LarkWebhookHandler handles POST /lark/actions requests from Lark.
+// It verifies the request signature, parses the card action payload,
 // updates the ticket status, and publishes a resume signal.
-type SlackWebhookHandler struct {
-	signingSecret string
-	tickets       ticketStatusUpdater
-	redis         redisPublisher
-	log           *slog.Logger
+type LarkWebhookHandler struct {
+	verificationToken string
+	tickets           ticketStatusUpdater
+	redis             redisPublisher
+	log               *slog.Logger
 }
 
-// NewSlackWebhookHandler constructs a production-ready SlackWebhookHandler.
-// It accepts the concrete *TicketStore and *redis.Client types as specified in design.md.
-func NewSlackWebhookHandler(
-	signingSecret string,
+// NewLarkWebhookHandler constructs a production-ready LarkWebhookHandler.
+func NewLarkWebhookHandler(
+	verificationToken string,
 	tickets *TicketStore,
 	rdb *redis.Client,
 	log *slog.Logger,
-) *SlackWebhookHandler {
+) *LarkWebhookHandler {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -60,80 +57,106 @@ func NewSlackWebhookHandler(
 	if tickets != nil {
 		ts = tickets
 	}
-	return &SlackWebhookHandler{
-		signingSecret: signingSecret,
-		tickets:       ts,
-		redis:         pub,
-		log:           log,
+	return &LarkWebhookHandler{
+		verificationToken: verificationToken,
+		tickets:           ts,
+		redis:             pub,
+		log:               log,
 	}
 }
 
-// newSlackWebhookHandlerWithDeps constructs a SlackWebhookHandler with injected
+// newLarkWebhookHandlerWithDeps constructs a LarkWebhookHandler with injected
 // interface dependencies — used in tests to inject mocks.
-func newSlackWebhookHandlerWithDeps(
-	signingSecret string,
+func newLarkWebhookHandlerWithDeps(
+	verificationToken string,
 	tickets ticketStatusUpdater,
 	redis redisPublisher,
 	log *slog.Logger,
-) *SlackWebhookHandler {
+) *LarkWebhookHandler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &SlackWebhookHandler{
-		signingSecret: signingSecret,
-		tickets:       tickets,
-		redis:         redis,
-		log:           log,
+	return &LarkWebhookHandler{
+		verificationToken: verificationToken,
+		tickets:           tickets,
+		redis:             redis,
+		log:               log,
 	}
 }
 
-// slackBlockActionsPayload is the internal representation of a Slack block_actions payload.
-type slackBlockActionsPayload struct {
-	Type    string        `json:"type"`
-	User    slackUser     `json:"user"`
-	Actions []slackAction `json:"actions"`
+// larkActionValue carries the ticket_id and action from a button click.
+type larkActionValue struct {
+	TicketID string `json:"ticket_id"`
+	Action   string `json:"action"`
 }
 
-// slackUser carries the Slack user ID from the action callback.
-type slackUser struct {
-	ID string `json:"id"`
+// larkCardAction carries the button action data in a card callback.
+type larkCardCallbackAction struct {
+	Tag   string          `json:"tag"`
+	Value larkActionValue `json:"value"`
 }
 
-// slackAction represents a single interactive component action.
-type slackAction struct {
-	ActionID string `json:"action_id"`
-	Value    string `json:"value"`
+// larkCardCallbackPayload is the JSON body Lark POSTs when a card button is clicked.
+type larkCardCallbackPayload struct {
+	OpenID string                 `json:"open_id"`
+	Action larkCardCallbackAction `json:"action"`
 }
 
-const slackReplayWindowSeconds = 5 * 60 // 5 minutes
+const larkReplayWindowSeconds = 5 * 60 // 5 minutes
 
-// ServeHTTP processes POST /slack/actions requests.
-// Processing order is NON-NEGOTIABLE for security (design.md):
-//  1. Read raw body (must precede any parsing for HMAC)
+// computeLarkSignature returns hex(sha256(verificationToken + timestamp + nonce + body)).
+// Both the gateway and mock-lark use this formula so signatures are mutually verifiable.
+func computeLarkSignature(verificationToken, timestamp, nonce string, body []byte) string {
+	h := sha256.New()
+	h.Write([]byte(verificationToken))
+	h.Write([]byte(timestamp))
+	h.Write([]byte(nonce))
+	h.Write(body)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// ServeHTTP processes POST /lark/actions requests.
+// Processing order (non-negotiable for security):
+//  0. Handle Lark URL verification challenge (no signature required — used during setup)
+//  1. Read raw body (must precede any parsing for signature check)
 //  2. Check timestamp replay window
-//  3. Verify HMAC-SHA256 signature
-//  4. Parse URL-encoded payload field → unmarshal JSON
-//  5. Route on action_id
+//  3. Verify SHA-256 signature
+//  4. Parse JSON payload
+//  5. Route on action value
 //  6. Extract ticketID
 //  7. UpdateStatus → on error return 500
 //  8. Publish resume signal → on error log warning, continue
 //  9. Return 200
-func (h *SlackWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *LarkWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Step 1: Read raw request body into []byte BEFORE any parsing (required for HMAC).
+	// Step 1: Read raw body before any parsing (required for signature verification).
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		h.log.Error("slack webhook: read body failed", "error", err)
+		h.log.Error("lark webhook: read body failed", "error", err)
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
-	// Step 2: Extract and validate timestamp (replay attack prevention, req 3.4).
-	tsHeader := r.Header.Get("X-Slack-Request-Timestamp")
+	// Step 0: Handle Lark URL verification challenge sent during callback URL setup.
+	// Lark sends {"type":"url_verification","challenge":"..."} with no signature headers.
+	var maybeChallenge struct {
+		Type      string `json:"type"`
+		Challenge string `json:"challenge"`
+	}
+	if json.Unmarshal(rawBody, &maybeChallenge) == nil && maybeChallenge.Type == "url_verification" {
+		h.log.Info("lark webhook: responding to URL verification challenge")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"challenge":"` + maybeChallenge.Challenge + `"}`))
+		return
+	}
+
+	// Step 2: Extract and validate timestamp (replay attack prevention).
+	tsHeader := r.Header.Get("X-Lark-Request-Timestamp")
 	tsUnix, err := strconv.ParseInt(tsHeader, 10, 64)
 	if err != nil {
-		h.log.Warn("slack webhook: invalid timestamp header", "header", tsHeader)
+		h.log.Warn("lark webhook: invalid timestamp header", "header", tsHeader)
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -141,8 +164,8 @@ func (h *SlackWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if delta < 0 {
 		delta = -delta
 	}
-	if delta > slackReplayWindowSeconds {
-		h.log.Warn("slack webhook: request timestamp outside replay window",
+	if delta > larkReplayWindowSeconds {
+		h.log.Warn("lark webhook: request timestamp outside replay window",
 			"timestamp", tsUnix,
 			"delta_seconds", delta,
 		)
@@ -150,74 +173,54 @@ func (h *SlackWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Step 3: Verify HMAC-SHA256 signature (req 3.2, 3.3).
-	baseString := "v0:" + tsHeader + ":" + string(rawBody)
-	mac := hmac.New(sha256.New, []byte(h.signingSecret))
-	mac.Write([]byte(baseString))
-	expectedSig := "v0=" + hex.EncodeToString(mac.Sum(nil))
-
-	providedSig := r.Header.Get("X-Slack-Signature")
-	if !hmac.Equal([]byte(expectedSig), []byte(providedSig)) {
-		h.log.Warn("slack webhook: signature mismatch")
+	// Step 3: Verify signature = sha256(verificationToken + timestamp + nonce + body).
+	nonce := r.Header.Get("X-Lark-Request-Nonce")
+	expectedSig := computeLarkSignature(h.verificationToken, tsHeader, nonce, rawBody)
+	providedSig := r.Header.Get("X-Lark-Signature")
+	if expectedSig != providedSig {
+		h.log.Warn("lark webhook: signature mismatch")
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
-	// Step 4: URL-decode the `payload` form field from rawBody; unmarshal into struct (req design step 6).
-	formValues, err := url.ParseQuery(string(rawBody))
-	if err != nil {
-		h.log.Error("slack webhook: parse form body failed", "error", err)
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	payloadEncoded := formValues.Get("payload")
-	if payloadEncoded == "" {
-		h.log.Warn("slack webhook: missing payload field")
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	payloadJSON, err := url.QueryUnescape(payloadEncoded)
-	if err != nil {
-		h.log.Error("slack webhook: unescape payload failed", "error", err)
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	var payload slackBlockActionsPayload
-	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
-		h.log.Error("slack webhook: unmarshal payload failed", "error", err)
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	if len(payload.Actions) == 0 {
-		h.log.Warn("slack webhook: no actions in payload")
+	// Step 4: Parse JSON payload.
+	var payload larkCardCallbackPayload
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		h.log.Error("lark webhook: unmarshal payload failed", "error", err)
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
-	// Step 5–6: Route on action_id; extract ticketID from button value (req design steps 7–8).
-	action := payload.Actions[0]
-	userID := payload.User.ID
-	ticketID := action.Value
+	// Step 5–6: Route on action value; extract ticketID.
+	ticketID := payload.Action.Value.TicketID
+	userID := payload.OpenID
+	actionName := payload.Action.Value.Action
+
+	if ticketID == "" {
+		h.log.Warn("lark webhook: missing ticket_id in action value")
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
 
 	var status string
-	switch action.ActionID {
-	case "approval_approve":
+	switch actionName {
+	case "approve":
 		status = "approved"
-	case "approval_deny":
+	case "deny":
 		status = "denied"
 	default:
-		h.log.Warn("slack webhook: unknown action_id",
-			"action_id", action.ActionID,
+		h.log.Warn("lark webhook: unknown action",
+			"action", actionName,
 			"ticketID", ticketID,
 		)
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
-	// Step 7: Persist the decision to Postgres BEFORE publishing the signal (req 4.3).
-	// On failure: return 500 (do NOT publish — decision not persisted, Slack will retry).
+	// Step 7: Persist the decision to Postgres BEFORE publishing the signal.
+	// On failure: return 500 (do NOT publish — decision not persisted, Lark will retry).
 	if err := h.tickets.UpdateStatus(ctx, ticketID, status, userID); err != nil {
-		h.log.Error("slack webhook: UpdateStatus failed",
+		h.log.Error("lark webhook: UpdateStatus failed",
 			"ticketID", ticketID,
 			"status", status,
 			"error", err,
@@ -226,17 +229,17 @@ func (h *SlackWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Step 8: Publish resume signal to the per-ticket Redis channel (req 4.1, 4.2).
-	// On failure: log warning but return 200 — ticket is persisted; waiter will timeout (req 5.3).
+	// Step 8: Publish resume signal to the per-ticket Redis channel.
+	// On failure: log warning but return 200 — ticket is persisted; waiter will timeout.
 	channel := "approvals:" + ticketID
 	if err := h.redis.Publish(ctx, channel, status); err != nil {
-		h.log.Warn("slack webhook: Redis Publish failed; ticket persisted, waiter will timeout",
+		h.log.Warn("lark webhook: Redis Publish failed; ticket persisted, waiter will timeout",
 			"ticketID", ticketID,
 			"channel", channel,
 			"error", err,
 		)
 	}
 
-	// Step 9: Return HTTP 200 to dismiss the Slack button interaction (req 4.4).
+	// Step 9: Return HTTP 200 to acknowledge the Lark callback.
 	w.WriteHeader(http.StatusOK)
 }

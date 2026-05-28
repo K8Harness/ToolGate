@@ -242,9 +242,10 @@ func newPolicyGateIntegrationHarness(t *testing.T, policyContents string) (*pgxp
 		SessionTTL:         time.Minute,
 		SessionLockTTL:     defaultSessionLockTTL,
 		LockAcquireTimeout: defaultLockAcquireTimeout,
-		SlackBotToken:      "test-token",
-		SlackSigningSecret: "test-secret",
-		SlackChannel:       "#test",
+		LarkAppID:             "cli_test",
+		LarkAppSecret:         "test-secret",
+		LarkChatID:            "oc_test",
+		LarkVerificationToken: "test-token",
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server, cleanupServer, err := buildGatewayServer(ctx, config, logger)

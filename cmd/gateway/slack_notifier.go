@@ -5,167 +5,236 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 )
 
 const (
-	slackAPIBaseURL       = "https://slack.com/api"
-	slackArgsTruncateAt   = 2000
-	slackArgsTruncateMark = "... [truncated]"
+	larkAPIBaseURL       = "https://open.feishu.cn/open-apis"
+	larkArgsTruncateAt   = 2000
+	larkArgsTruncateMark = "... [truncated]"
 )
 
-// SlackNotifier abstracts outbound approval notification.
-// v0 implements with Slack chat.postMessage; v1+ may add other channels.
-type SlackNotifier interface {
-	// SendApprovalRequest sends a Block Kit message with Approve/Deny buttons.
+// ApprovalNotifier abstracts outbound approval notification.
+// Implemented by LarkClient; tests use a mock double.
+type ApprovalNotifier interface {
+	// SendApprovalRequest sends an interactive message with Approve/Deny buttons.
 	// ticketID is embedded in button values for routing on callback.
 	// Errors are non-fatal: the caller logs and continues the approval hold.
 	SendApprovalRequest(ctx context.Context, ticketID string, t TicketRecord) error
 }
 
-// SlackClient sends Block Kit approval request messages via Slack chat.postMessage.
-type SlackClient struct {
-	botToken   string
-	channel    string
+// LarkClient sends interactive card approval request messages via Lark's messaging API.
+type LarkClient struct {
+	appID      string
+	appSecret  string
+	chatID     string
 	httpClient *http.Client
 	log        *slog.Logger
-	apiBaseURL string // overridable for tests; defaults to slackAPIBaseURL
+	apiBaseURL string // overridable for tests; defaults to larkAPIBaseURL
 }
 
-// NewSlackClient constructs a production-ready SlackClient.
-func NewSlackClient(botToken, channel, baseURL string, log *slog.Logger) *SlackClient {
-	sc := newSlackClientWithHTTP(botToken, channel, &http.Client{}, log)
-	sc.apiBaseURL = baseURL
-	return sc
+// NewLarkClient constructs a production-ready LarkClient.
+func NewLarkClient(appID, appSecret, chatID, baseURL string, log *slog.Logger) *LarkClient {
+	return newLarkClientWithHTTP(appID, appSecret, chatID, baseURL, &http.Client{}, log)
 }
 
-// newSlackClientWithHTTP constructs a SlackClient with an injected HTTP client.
-// This is the internal constructor used by tests to inject a custom transport or
-// redirect requests to a test server.
-func newSlackClientWithHTTP(botToken, channel string, httpClient *http.Client, log *slog.Logger) *SlackClient {
+// newLarkClientWithHTTP constructs a LarkClient with an injected HTTP client (used in tests).
+func newLarkClientWithHTTP(appID, appSecret, chatID, baseURL string, httpClient *http.Client, log *slog.Logger) *LarkClient {
 	if log == nil {
 		log = slog.Default()
 	}
 	if httpClient == nil {
 		httpClient = &http.Client{}
 	}
-	return &SlackClient{
-		botToken:   botToken,
-		channel:    channel,
+	if baseURL == "" {
+		baseURL = larkAPIBaseURL
+	}
+	return &LarkClient{
+		appID:      appID,
+		appSecret:  appSecret,
+		chatID:     chatID,
 		httpClient: httpClient,
 		log:        log,
-		apiBaseURL: slackAPIBaseURL,
+		apiBaseURL: baseURL,
 	}
 }
 
-// slackText is a Slack text object used inside blocks.
-type slackText struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+// larkTenantTokenReq is the payload for the tenant access token endpoint.
+type larkTenantTokenReq struct {
+	AppID     string `json:"app_id"`
+	AppSecret string `json:"app_secret"`
 }
 
-// slackSectionBlock is a Slack section block.
-type slackSectionBlock struct {
-	Type string    `json:"type"`
-	Text slackText `json:"text"`
+// larkTenantTokenResp is the response from the tenant access token endpoint.
+type larkTenantTokenResp struct {
+	Code              int    `json:"code"`
+	Msg               string `json:"msg"`
+	TenantAccessToken string `json:"tenant_access_token"`
 }
 
-// slackButtonElement is a Slack button element inside an actions block.
-type slackButtonElement struct {
-	Type     string    `json:"type"`
-	Text     slackText `json:"text"`
-	ActionID string    `json:"action_id"`
-	Value    string    `json:"value"`
+// larkCardText is a Lark card text element.
+type larkCardText struct {
+	Tag     string `json:"tag"`
+	Content string `json:"content"`
 }
 
-// slackActionsBlock is a Slack actions block containing interactive elements.
-type slackActionsBlock struct {
-	Type     string               `json:"type"`
-	Elements []slackButtonElement `json:"elements"`
+// larkCardButton is a Lark interactive card button element.
+type larkCardButton struct {
+	Tag   string            `json:"tag"`
+	Text  larkCardText      `json:"text"`
+	Type  string            `json:"type"`
+	Value map[string]string `json:"value"`
 }
 
-// slackChatPostMessageRequest is the payload for Slack chat.postMessage.
-type slackChatPostMessageRequest struct {
-	Channel string        `json:"channel"`
-	Blocks  []interface{} `json:"blocks"`
+// larkCardAction is a Lark card action block containing buttons.
+type larkCardAction struct {
+	Tag     string           `json:"tag"`
+	Actions []larkCardButton `json:"actions"`
 }
 
-// SendApprovalRequest sends a Block Kit message to Slack containing the tool details
-// and Approve/Deny action buttons. The ticketID is embedded in each button's value
-// so the webhook handler can route the decision back to the correct approval hold.
-func (c *SlackClient) SendApprovalRequest(ctx context.Context, ticketID string, t TicketRecord) error {
+// larkCardDiv is a Lark card markdown text block.
+type larkCardDiv struct {
+	Tag  string       `json:"tag"`
+	Text larkCardText `json:"text"`
+}
+
+// larkCard is the top-level interactive card payload.
+type larkCard struct {
+	Config   map[string]bool `json:"config"`
+	Elements []interface{}   `json:"elements"`
+}
+
+// larkSendMessageReq is the payload for Lark's im/v1/messages endpoint.
+// Content is the JSON-encoded card string (Lark requires a JSON string, not object).
+type larkSendMessageReq struct {
+	ReceiveID string `json:"receive_id"`
+	MsgType   string `json:"msg_type"`
+	Content   string `json:"content"`
+}
+
+// fetchTenantToken obtains a short-lived tenant access token using app credentials.
+func (c *LarkClient) fetchTenantToken(ctx context.Context) (string, error) {
+	body, err := json.Marshal(larkTenantTokenReq{AppID: c.appID, AppSecret: c.appSecret})
+	if err != nil {
+		return "", fmt.Errorf("lark notifier: marshal token request: %w", err)
+	}
+
+	url := c.apiBaseURL + "/auth/v3/tenant_access_token/internal"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("lark notifier: build token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("lark notifier: token http request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("lark notifier: token endpoint status %d", resp.StatusCode)
+	}
+
+	var tokenResp larkTenantTokenResp
+	rawBody, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(rawBody, &tokenResp); err != nil {
+		return "", fmt.Errorf("lark notifier: decode token response: %w", err)
+	}
+	if tokenResp.Code != 0 {
+		return "", fmt.Errorf("lark notifier: token error code %d: %s", tokenResp.Code, tokenResp.Msg)
+	}
+	return tokenResp.TenantAccessToken, nil
+}
+
+// SendApprovalRequest sends an interactive Lark card with Approve/Deny buttons.
+// The ticketID and action are embedded in each button's value map so the webhook
+// handler can route the decision back to the correct approval hold.
+func (c *LarkClient) SendApprovalRequest(ctx context.Context, ticketID string, t TicketRecord) error {
+	token, err := c.fetchTenantToken(ctx)
+	if err != nil {
+		return err
+	}
+
 	argsStr := truncateArgs(t.Arguments)
+	cardText := fmt.Sprintf("**Tool:** %s\n**Arguments:** %s\n**Session:** %s",
+		t.ToolName, argsStr, t.SessionID)
 
-	sectionText := fmt.Sprintf(
-		"*Tool:* %s\n*Arguments:* %s\n*Session:* %s",
-		t.ToolName,
-		argsStr,
-		t.SessionID,
-	)
-
-	payload := slackChatPostMessageRequest{
-		Channel: c.channel,
-		Blocks: []interface{}{
-			slackSectionBlock{
-				Type: "section",
-				Text: slackText{
-					Type: "mrkdwn",
-					Text: sectionText,
-				},
+	card := larkCard{
+		Config: map[string]bool{"wide_screen_mode": true},
+		Elements: []interface{}{
+			larkCardDiv{
+				Tag:  "div",
+				Text: larkCardText{Tag: "lark_md", Content: cardText},
 			},
-			slackActionsBlock{
-				Type: "actions",
-				Elements: []slackButtonElement{
+			larkCardAction{
+				Tag: "action",
+				Actions: []larkCardButton{
 					{
-						Type:     "button",
-						Text:     slackText{Type: "plain_text", Text: "Approve"},
-						ActionID: "approval_approve",
-						Value:    ticketID,
+						Tag:  "button",
+						Text: larkCardText{Tag: "plain_text", Content: "Approve"},
+						Type: "primary",
+						Value: map[string]string{
+							"ticket_id": ticketID,
+							"action":    "approve",
+						},
 					},
 					{
-						Type:     "button",
-						Text:     slackText{Type: "plain_text", Text: "Deny"},
-						ActionID: "approval_deny",
-						Value:    ticketID,
+						Tag:  "button",
+						Text: larkCardText{Tag: "plain_text", Content: "Deny"},
+						Type: "danger",
+						Value: map[string]string{
+							"ticket_id": ticketID,
+							"action":    "deny",
+						},
 					},
 				},
 			},
 		},
 	}
 
-	body, err := json.Marshal(payload)
+	cardJSON, err := json.Marshal(card)
 	if err != nil {
-		return fmt.Errorf("slack notifier: marshal payload: %w", err)
+		return fmt.Errorf("lark notifier: marshal card: %w", err)
 	}
 
-	url := c.apiBaseURL + "/chat.postMessage"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	msgBody, err := json.Marshal(larkSendMessageReq{
+		ReceiveID: c.chatID,
+		MsgType:   "interactive",
+		Content:   string(cardJSON),
+	})
 	if err != nil {
-		return fmt.Errorf("slack notifier: build request: %w", err)
+		return fmt.Errorf("lark notifier: marshal message request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.botToken)
+
+	url := c.apiBaseURL + "/im/v1/messages?receive_id_type=chat_id"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(msgBody))
+	if err != nil {
+		return fmt.Errorf("lark notifier: build message request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("slack notifier: http request: %w", err)
+		return fmt.Errorf("lark notifier: message http request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("slack notifier: unexpected status %d", resp.StatusCode)
+		return fmt.Errorf("lark notifier: unexpected status %d", resp.StatusCode)
 	}
-
 	return nil
 }
 
-// truncateArgs converts the raw arguments JSON to a displayable string,
-// truncating at slackArgsTruncateAt characters to stay within Slack's per-block limits.
+// truncateArgs converts raw arguments JSON to a displayable string,
+// truncating at larkArgsTruncateAt characters to stay within card limits.
 func truncateArgs(args json.RawMessage) string {
 	s := string(args)
-	if len(s) > slackArgsTruncateAt {
-		return s[:slackArgsTruncateAt] + slackArgsTruncateMark
+	if len(s) > larkArgsTruncateAt {
+		return s[:larkArgsTruncateAt] + larkArgsTruncateMark
 	}
 	return s
 }
